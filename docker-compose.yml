@@ -6,9 +6,22 @@ services:
     command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
     environment:
       APP_ENV: development
+      SEARXNG_BASE_URL: http://searxng:8080
+      SEARXNG_TIMEOUT_SECONDS: 20
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
+    depends_on:
+      - searxng
+      - redis
+
+  searxng:
+    image: searxng/searxng
+    environment:
+      INSTANCE_NAME: Quarry
+      BASE_URL: http://localhost:8080/
+    ports:
+      - "8080:8080"
     depends_on:
       - redis
 

@@ -37,6 +37,7 @@ class SearchFormat(str, Enum):
 
     JSON = "json"
     CSV = "csv"
+    CSS = "css"
     RSS = "rss"
 
 
@@ -61,6 +62,10 @@ class SearchRequest(BaseModel):
 class SearchMetadata(BaseModel):
     """Per-result metadata."""
 
+    source: str = "searxng"
+    crawl_websites: bool = False
+    rank_and_score_deterministically: bool = False
+    compress_output_using_headroom: bool = False
     tokens_before_compression: int | None = None
     tokens_after_compression: int | None = None
     websites_dropped_percentage: float | None = None
@@ -73,7 +78,7 @@ class SearchResult(BaseModel):
     url: str
     title: str
     content: str
-    metadata: SearchMetadata | None = None
+    metadata: SearchMetadata = Field(default_factory=SearchMetadata)
 
 
 class SearchResponse(BaseModel):

@@ -16,6 +16,7 @@ flowchart LR
   Pipeline --> Compression[Context Compression]
   Pipeline --> Formatting[Result Formatting]
   Pipeline --> Cache[Redis Cache]
+   API --> SearXNG[SearXNG Upstream]
   Retrieval --> Providers[External Providers]
   Crawler --> Web[Web Pages]
 ```
@@ -40,6 +41,16 @@ flowchart LR
    uvicorn api.app:app --reload
    ```
 
+## Docker
+
+Bring up the full stack with SearXNG and Redis:
+
+```bash
+docker compose up --build
+```
+
+The API reads `SEARXNG_BASE_URL` from the environment and normalizes the upstream JSON response into `SearchResponse`.
+
 ## Development Setup
 
 - Python 3.12+
@@ -49,10 +60,11 @@ flowchart LR
 - Ruff
 - Black
 - Pytest
+- httpx
 
 ## API
 
-- `POST /search` accepts a `SearchRequest` body and returns a `SearchResponse` scaffold.
+- `POST /search` accepts a `SearchRequest` body, calls SearXNG over HTTP, and returns a normalized `SearchResponse`.
 
 ## Project Layout
 

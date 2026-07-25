@@ -20,4 +20,5 @@ async def health() -> dict[str, str]:
 
     return {"status": "ok"}
 
+
 app.include_router(search_router)
