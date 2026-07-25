@@ -50,6 +50,10 @@ flowchart LR
 - Black
 - Pytest
 
+## API
+
+- `POST /search` accepts a `SearchRequest` body and returns a `SearchResponse` scaffold.
+
 ## Project Layout
 
 - `config/`: application configuration and provider definitions

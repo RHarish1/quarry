@@ -2,6 +2,8 @@
 
 from fastapi import FastAPI
 
+from api.routes.search import router as search_router
+
 app = FastAPI(title="Quarry")
 
 
@@ -17,3 +19,5 @@ async def health() -> dict[str, str]:
     """Return a lightweight health response."""
 
     return {"status": "ok"}
+
+app.include_router(search_router)
