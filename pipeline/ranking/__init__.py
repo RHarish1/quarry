@@ -1,0 +1,1 @@
+"""Ranking package for Quarry."""
