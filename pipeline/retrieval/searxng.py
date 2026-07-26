@@ -95,9 +95,19 @@ async def search_searxng(request: SearchRequest) -> SearchResponse:
             data=params,
             headers={"Accept": "application/json"},
         )
+        print("Request URL:", response.request.url)
+        print("Params:", params)
+        print("Status:", response.status_code)
+        print("Body:", response.text)
 
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="SearXNG returned an error")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "status": response.status_code,
+                "body": response.text,
+            },
+        )
 
     payload = response.json()
     if not isinstance(payload, Mapping):

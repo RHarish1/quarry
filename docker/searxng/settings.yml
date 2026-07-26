@@ -1,0 +1,12 @@
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+    - csv
+    - rss
+
+server:
+  secret_key: "change-me"
+  image_proxy: true
