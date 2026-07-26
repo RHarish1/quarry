@@ -1,7 +1,7 @@
 """Application settings for Quarry."""
 
-from dataclasses import dataclass, field
 import os
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,6 +13,12 @@ class Settings:
     )
     searxng_timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("SEARXNG_TIMEOUT_SECONDS", "20"))
+    )
+    crawl_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv("CRAWL_TIMEOUT_SECONDS", "30"))
+    )
+    crawl_max_concurrency: int = field(
+        default_factory=lambda: int(os.getenv("CRAWL_MAX_CONCURRENCY", "4"))
     )
 
 

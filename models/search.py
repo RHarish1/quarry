@@ -1,8 +1,11 @@
 """Search request and response models for Quarry."""
 
 from enum import Enum, IntEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+from models.clean_document import CleanDocument
 
 
 class CleaningLevel(IntEnum):
@@ -59,29 +62,43 @@ class SearchRequest(BaseModel):
     format: SearchFormat = SearchFormat.JSON
 
 
-class SearchMetadata(BaseModel):
-    """Per-result metadata."""
-
-    source: str = "searxng"
-    crawl_websites: bool = False
-    rank_and_score_deterministically: bool = False
-    compress_output_using_headroom: bool = False
-    tokens_before_compression: int | None = None
-    tokens_after_compression: int | None = None
-    websites_dropped_percentage: float | None = None
-    compression_rate: float | None = None
-
-
 class SearchResult(BaseModel):
-    """A single search result."""
+    """Search provider result."""
 
     url: str
     title: str
     content: str
-    metadata: SearchMetadata = Field(default_factory=SearchMetadata)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SearchResults(BaseModel):
+    """Collection of search provider results."""
+
+    results: list[SearchResult] = Field(default_factory=list)
+
+
+class CrawlRequest(BaseModel):
+    """Crawler stage input."""
+
+    search_results: SearchResults
+    crawl_websites: bool = False
+    enable_caching: bool = False
+    timeout_seconds: float = 30.0
+    max_concurrency: int = 4
+
+
+class SearchTimings(BaseModel):
+    """Search pipeline timings."""
+
+    search_latency_ms: float
+    crawl_latency_ms: float
+    cleaning_latency_ms: float
+    total_request_latency_ms: float
 
 
 class SearchResponse(BaseModel):
     """Search response payload."""
 
-    results: list[SearchResult] = Field(default_factory=list)
+    query: str
+    timings: SearchTimings
+    documents: list[CleanDocument] = Field(default_factory=list)

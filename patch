@@ -1,0 +1,648 @@
+diff --git a/.dockerignore b/.dockerignore
+index c1d6c4a..e056e17 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -9,3 +9,4 @@ venv
+ dist
+ build
+ .git
++.crawl4ai/
+diff --git a/.env.example b/.env.example
+index 4dd1724..c4a5c0b 100644
+--- a/.env.example
++++ b/.env.example
+@@ -2,4 +2,6 @@ APP_NAME=Quarry
+ APP_ENV=development
+ SEARXNG_BASE_URL=http://searxng:8080
+ SEARXNG_TIMEOUT_SECONDS=20
++CRAWL_TIMEOUT_SECONDS=30
++CRAWL_MAX_CONCURRENCY=4
+ REDIS_URL=redis://redis:6379/0
+diff --git a/.gitignore b/.gitignore
+index 727bccb..7cbc4ec 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -11,3 +11,4 @@ dist/
+ build/
+ htmlcov/
+ .coverage
++.crawl4ai/
+diff --git a/Dockerfile b/Dockerfile
+index cf091aa..7467a80 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -12,4 +12,4 @@ COPY . /app
+ 
+ EXPOSE 8000
+ 
+-CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
++ENTRYPOINT ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+diff --git a/README.md b/README.md
+index 494dbd9..e1c6e64 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # Quarry
+ 
+-Quarry is an LLM-native retrieval backend. It accepts a search query, performs multi-provider retrieval, crawls web pages, deterministically cleans content, reranks documents, compresses them into token-efficient context, and returns structured results through a REST API.
++Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves candidate URLs via SearXNG, crawls the matching pages with Crawl4AI, deterministically cleans the markdown, and returns structured results through a REST API.
+ 
+ ## Architecture
+ 
+@@ -8,17 +8,13 @@ Quarry is an LLM-native retrieval backend. It accepts a search query, performs m
+ flowchart LR
+   Client[Client] --> API[FastAPI API]
+   API --> Pipeline[Retrieval Pipeline]
+-  Pipeline --> Query[Query Normalization]
+-  Pipeline --> Retrieval[Multi-Provider Retrieval]
+-  Pipeline --> Crawler[Web Crawler]
+-  Pipeline --> Cleaning[Deterministic Cleaning]
+-  Pipeline --> Ranking[Reranking]
+-  Pipeline --> Compression[Context Compression]
+-  Pipeline --> Formatting[Result Formatting]
+-  Pipeline --> Cache[Redis Cache]
+-   API --> SearXNG[SearXNG Upstream]
+-  Retrieval --> Providers[External Providers]
+-  Crawler --> Web[Web Pages]
++   Pipeline --> Search[SearXNG Search]
++   Pipeline --> Crawler[Crawl4AI Crawler]
++   Pipeline --> Cleaner[Deterministic Cleaner]
++   Search --> URLs[Candidate URLs]
++   Crawler --> Document[Document]
++   Cleaner --> CleanDocument[CleanDocument]
++   API --> Response[SearchResponse]
+ ```
+ 
+ ## Quick Start
+@@ -49,8 +45,18 @@ Bring up the full stack with SearXNG and Redis:
+ docker compose up --build
+ ```
+ 
++Use `docker compose`, not the API image alone, for a plug-and-play start. The Dockerfile builds only the API container; the compose file provides the required SearXNG and Redis services.
++
+ The API reads `SEARXNG_BASE_URL` from the environment and normalizes the upstream JSON response into `SearchResponse`.
+ 
++`POST /search` returns:
++
++- `query`
++- `timings`
++- `documents`
++
++Each document is a `CleanDocument` that preserves the raw document fields and adds deterministic cleaning metrics.
++
+ ## Development Setup
+ 
+ - Python 3.12+
+@@ -61,10 +67,11 @@ The API reads `SEARXNG_BASE_URL` from the environment and normalizes the upstrea
+ - Black
+ - Pytest
+ - httpx
++- Crawl4AI
+ 
+ ## API
+ 
+-- `POST /search` accepts a `SearchRequest` body, calls SearXNG over HTTP, and returns a normalized `SearchResponse`.
++- `POST /search` accepts a `SearchRequest` body, calls SearXNG over HTTP, crawls the returned URLs, cleans the markdown, and returns a normalized `SearchResponse`.
+ 
+ ## Project Layout
+ 
+diff --git a/api/routes/search.py b/api/routes/search.py
+index 0639e0a..458405b 100644
+--- a/api/routes/search.py
++++ b/api/routes/search.py
+@@ -1,20 +1,27 @@
+ """Search route for Quarry."""
+ 
+-from fastapi import APIRouter, HTTPException
++from fastapi import APIRouter
+ 
+-from models.search import SearchRequest, SearchResponse
+-from pipeline.retrieval.searxng import search_searxng
++from models.search import SearchRequest, SearchResponse, SearchTimings
++from pipeline.pipeline import execute_search_pipeline
+ 
+ router = APIRouter()
+ 
+ 
+ @router.post("/search", response_model=SearchResponse)
+ async def search(request: SearchRequest) -> SearchResponse:
+-    """Accept a search request and return normalized SearXNG results."""
++    """Accept a search request and return crawled, cleaned documents."""
+ 
+     try:
+-        return await search_searxng(request)
+-    except HTTPException:
+-        raise
+-    except Exception as exc:  # pragma: no cover - defensive boundary for upstream calls
+-        raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
++        return await execute_search_pipeline(request)
++    except Exception:
++        return SearchResponse(
++            query=request.query,
++            timings=SearchTimings(
++                search_latency_ms=0.0,
++                crawl_latency_ms=0.0,
++                cleaning_latency_ms=0.0,
++                total_request_latency_ms=0.0,
++            ),
++            documents=[],
++        )
+diff --git a/config/settings.py b/config/settings.py
+index 5987a10..4536e41 100644
+--- a/config/settings.py
++++ b/config/settings.py
+@@ -1,7 +1,7 @@
+ """Application settings for Quarry."""
+ 
+-from dataclasses import dataclass, field
+ import os
++from dataclasses import dataclass, field
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -14,6 +14,12 @@ class Settings:
+     searxng_timeout_seconds: float = field(
+         default_factory=lambda: float(os.getenv("SEARXNG_TIMEOUT_SECONDS", "20"))
+     )
++    crawl_timeout_seconds: float = field(
++        default_factory=lambda: float(os.getenv("CRAWL_TIMEOUT_SECONDS", "30"))
++    )
++    crawl_max_concurrency: int = field(
++        default_factory=lambda: int(os.getenv("CRAWL_MAX_CONCURRENCY", "4"))
++    )
+ 
+ 
+ settings = Settings()
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 7fbad69..74ce7be 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -3,17 +3,28 @@ services:
+     build:
+       context: .
+       dockerfile: Dockerfile
+-    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
++    command: uvicorn api.app:app --host 0.0.0.0 --port 8000
+     environment:
+       APP_ENV: development
+       SEARXNG_BASE_URL: http://searxng:8080
+       SEARXNG_TIMEOUT_SECONDS: 20
++      CRAWL_TIMEOUT_SECONDS: 30
++      CRAWL_MAX_CONCURRENCY: 4
+       REDIS_URL: redis://redis:6379/0
+     ports:
+       - "8000:8000"
+     depends_on:
+-      - searxng
+-      - redis
++      searxng:
++        condition: service_started
++      redis:
++        condition: service_started
++    restart: unless-stopped
++
++    healthcheck:
++      test: [ "CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())" ]
++      interval: 10s
++      timeout: 5s
++      retries: 5
+ 
+   searxng:
+     image: searxng/searxng
+@@ -23,11 +34,26 @@ services:
+     ports:
+       - "8080:8080"
+     depends_on:
+-      - redis
++      redis:
++        condition: service_started
+     volumes:
+       - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
++    restart: unless-stopped
++
++    healthcheck:
++      test: [ "CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/').status)" ]
++      interval: 10s
++      timeout: 5s
++      retries: 10
+ 
+   redis:
+     image: redis:7-alpine
+     ports:
+       - "6379:6379"
++    restart: unless-stopped
++
++    healthcheck:
++      test: [ "CMD", "redis-cli", "ping" ]
++      interval: 10s
++      timeout: 5s
++      retries: 10
+diff --git a/docker/searxng/settings.yml b/docker/searxng/settings.yml
+index 6cb7fec..3924162 100644
+--- a/docker/searxng/settings.yml
++++ b/docker/searxng/settings.yml
+@@ -8,5 +8,8 @@ search:
+     - rss
+ 
+ server:
++  bind_address: 0.0.0.0
++  port: 8080
++  base_url: http://localhost:8080/
+   secret_key: "change-me"
+   image_proxy: true
+diff --git a/models/__init__.py b/models/__init__.py
+index 32719bb..ca1351e 100644
+--- a/models/__init__.py
++++ b/models/__init__.py
+@@ -1,13 +1,18 @@
+ """Data models for Quarry."""
+ 
++from models.clean_document import CleanDocument, CleanDocuments, CleanRequest
++from models.document import Document, Documents
+ from models.search import (
+-	CleaningLevel,
+-	FlexibleFormatting,
+-	SearchFormat,
+-	SearchMetadata,
+-	SearchRequest,
+-	SearchResponse,
+-	SearchResult,
+-	TimeRange,
++    CrawlRequest,
++    CleaningLevel,
++    FlexibleFormatting,
++    SearchFormat,
++    SearchRequest,
++    SearchResponse,
++    SearchResult,
++    SearchResults,
++    SearchTimings,
++    TimeRange,
+ )
+ 
++
+diff --git a/models/search.py b/models/search.py
+index c727e06..130b58a 100644
+--- a/models/search.py
++++ b/models/search.py
+@@ -1,9 +1,12 @@
+ """Search request and response models for Quarry."""
+ 
+ from enum import Enum, IntEnum
++from typing import Any
+ 
+ from pydantic import BaseModel, Field
+ 
++from models.clean_document import CleanDocument
++
+ 
+ class CleaningLevel(IntEnum):
+     """Cleaning intensity levels."""
+@@ -59,29 +62,43 @@ class SearchRequest(BaseModel):
+     format: SearchFormat = SearchFormat.JSON
+ 
+ 
+-class SearchMetadata(BaseModel):
+-    """Per-result metadata."""
+-
+-    source: str = "searxng"
+-    crawl_websites: bool = False
+-    rank_and_score_deterministically: bool = False
+-    compress_output_using_headroom: bool = False
+-    tokens_before_compression: int | None = None
+-    tokens_after_compression: int | None = None
+-    websites_dropped_percentage: float | None = None
+-    compression_rate: float | None = None
+-
+-
+ class SearchResult(BaseModel):
+-    """A single search result."""
++    """Search provider result."""
+ 
+     url: str
+     title: str
+     content: str
+-    metadata: SearchMetadata = Field(default_factory=SearchMetadata)
++    metadata: dict[str, Any] = Field(default_factory=dict)
++
++
++class SearchResults(BaseModel):
++    """Collection of search provider results."""
++
++    results: list[SearchResult] = Field(default_factory=list)
++
++
++class CrawlRequest(BaseModel):
++    """Crawler stage input."""
++
++    search_results: SearchResults
++    crawl_websites: bool = False
++    enable_caching: bool = False
++    timeout_seconds: float = 30.0
++    max_concurrency: int = 4
++
++
++class SearchTimings(BaseModel):
++    """Search pipeline timings."""
++
++    search_latency_ms: float
++    crawl_latency_ms: float
++    cleaning_latency_ms: float
++    total_request_latency_ms: float
+ 
+ 
+ class SearchResponse(BaseModel):
+     """Search response payload."""
+ 
+-    results: list[SearchResult] = Field(default_factory=list)
++    query: str
++    timings: SearchTimings
++    documents: list[CleanDocument] = Field(default_factory=list)
+diff --git a/pipeline/cleaning/__init__.py b/pipeline/cleaning/__init__.py
+index af5f251..d425416 100644
+--- a/pipeline/cleaning/__init__.py
++++ b/pipeline/cleaning/__init__.py
+@@ -1 +1,4 @@
+ """Cleaning package for Quarry."""
++
++from pipeline.cleaning.cleaner import clean_documents
++
+diff --git a/pipeline/crawler/__init__.py b/pipeline/crawler/__init__.py
+index fd67ad9..d4e7e8f 100644
+--- a/pipeline/crawler/__init__.py
++++ b/pipeline/crawler/__init__.py
+@@ -1 +1,4 @@
+ """Crawler package for Quarry."""
++
++from pipeline.crawler.crawler import crawl_documents
++
+diff --git a/pipeline/pipeline.py b/pipeline/pipeline.py
+index a2fef5c..6e913a0 100644
+--- a/pipeline/pipeline.py
++++ b/pipeline/pipeline.py
+@@ -1,7 +1,103 @@
+ """Top-level pipeline orchestration for Quarry."""
+ 
++from __future__ import annotations
+ 
+-class Pipeline:
+-    """Pipeline orchestrator."""
++from time import perf_counter
+ 
+-    pass
++from config.settings import settings
++from models.clean_document import CleanRequest
++from models.search import CrawlRequest, SearchRequest, SearchResponse, SearchTimings
++from pipeline.cleaning.cleaner import clean_documents
++from pipeline.crawler.crawler import crawl_documents
++from pipeline.retrieval.searxng import search_searxng
++
++
++async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
++    """Run the search, crawl, and cleaning pipeline."""
++
++    total_started = perf_counter()
++
++    search_started = perf_counter()
++    try:
++        search_results = await search_searxng(request)
++    except Exception:
++        search_results = None
++    search_latency_ms = (perf_counter() - search_started) * 1000.0
++
++    if search_results is None:
++        total_request_latency_ms = (perf_counter() - total_started) * 1000.0
++        return SearchResponse(
++            query=request.query,
++            timings=SearchTimings(
++                search_latency_ms=search_latency_ms,
++                crawl_latency_ms=0.0,
++                cleaning_latency_ms=0.0,
++                total_request_latency_ms=total_request_latency_ms,
++            ),
++            documents=[],
++        )
++
++    crawl_started = perf_counter()
++    try:
++        crawled_documents = await crawl_documents(
++            CrawlRequest(
++                search_results=search_results,
++                crawl_websites=request.crawl_websites,
++                enable_caching=request.enable_caching,
++                timeout_seconds=settings.crawl_timeout_seconds,
++                max_concurrency=settings.crawl_max_concurrency,
++            )
++        )
++    except Exception:
++        crawled_documents = None
++    crawl_latency_ms = (perf_counter() - crawl_started) * 1000.0
++
++    if crawled_documents is None:
++        total_request_latency_ms = (perf_counter() - total_started) * 1000.0
++        return SearchResponse(
++            query=request.query,
++            timings=SearchTimings(
++                search_latency_ms=search_latency_ms,
++                crawl_latency_ms=crawl_latency_ms,
++                cleaning_latency_ms=0.0,
++                total_request_latency_ms=total_request_latency_ms,
++            ),
++            documents=[],
++        )
++
++    cleaning_started = perf_counter()
++    try:
++        cleaned_documents = clean_documents(
++            CleanRequest(
++                documents=crawled_documents,
++                cleaning_level=int(request.cleaning_level),
++            )
++        )
++    except Exception:
++        cleaned_documents = None
++    cleaning_latency_ms = (perf_counter() - cleaning_started) * 1000.0
++
++    if cleaned_documents is None:
++        total_request_latency_ms = (perf_counter() - total_started) * 1000.0
++        return SearchResponse(
++            query=request.query,
++            timings=SearchTimings(
++                search_latency_ms=search_latency_ms,
++                crawl_latency_ms=crawl_latency_ms,
++                cleaning_latency_ms=cleaning_latency_ms,
++                total_request_latency_ms=total_request_latency_ms,
++            ),
++            documents=[],
++        )
++
++    total_request_latency_ms = (perf_counter() - total_started) * 1000.0
++    return SearchResponse(
++        query=request.query,
++        timings=SearchTimings(
++            search_latency_ms=search_latency_ms,
++            crawl_latency_ms=crawl_latency_ms,
++            cleaning_latency_ms=cleaning_latency_ms,
++            total_request_latency_ms=total_request_latency_ms,
++        ),
++        documents=cleaned_documents.documents,
++    )
+diff --git a/pipeline/retrieval/__init__.py b/pipeline/retrieval/__init__.py
+index b706076..b3cd36c 100644
+--- a/pipeline/retrieval/__init__.py
++++ b/pipeline/retrieval/__init__.py
+@@ -2,3 +2,4 @@
+ 
+ from pipeline.retrieval.searxng import search_searxng
+ 
++
+diff --git a/pipeline/retrieval/searxng.py b/pipeline/retrieval/searxng.py
+index 541c8ec..7fc438a 100644
+--- a/pipeline/retrieval/searxng.py
++++ b/pipeline/retrieval/searxng.py
+@@ -6,26 +6,11 @@ import httpx
+ from fastapi import HTTPException
+ 
+ from config.settings import settings
+-from models.search import (
+-    SearchFormat,
+-    SearchMetadata,
+-    SearchRequest,
+-    SearchResponse,
+-    SearchResult,
+-)
+-
+-
+-def _format_for_searxng(search_format: SearchFormat) -> str:
+-    """Map the request format to the upstream SearXNG format name."""
+-
+-    if search_format is SearchFormat.CSS:
+-        return "csv"
+-
+-    return search_format.value
++from models.search import SearchRequest, SearchResult, SearchResults
+ 
+ 
+ def _build_params(request: SearchRequest) -> dict[str, str]:
+-    """Build a minimal form payload for SearXNG."""
++    """Build a form payload for SearXNG."""
+ 
+     params: dict[str, str] = {
+         "q": request.query,
+@@ -47,7 +32,7 @@ def _build_params(request: SearchRequest) -> dict[str, str]:
+     return params
+ 
+ 
+-def _extract_results(payload: Mapping[str, object], request: SearchRequest) -> list[SearchResult]:
++def _extract_results(payload: Mapping[str, object]) -> list[SearchResult]:
+     """Convert a SearXNG JSON payload into SearchResult objects."""
+ 
+     raw_results = payload.get("results", [])
+@@ -59,58 +44,48 @@ def _extract_results(payload: Mapping[str, object], request: SearchRequest) -> l
+         if not isinstance(item, Mapping):
+             continue
+ 
++        known_keys = {"url", "title", "content"}
+         results.append(
+             SearchResult(
+                 url=str(item.get("url", "")),
+                 title=str(item.get("title", "")),
+                 content=str(item.get("content", "")),
+-                metadata=SearchMetadata(
+-                    source="searxng",
+-                    crawl_websites=False,
+-                    rank_and_score_deterministically=False,
+-                    compress_output_using_headroom=False,
+-                    tokens_before_compression=None,
+-                    tokens_after_compression=None,
+-                    websites_dropped_percentage=None,
+-                    compression_rate=None,
+-                ),
++                metadata={key: value for key, value in item.items() if key not in known_keys},
+             )
+         )
+ 
+     return results
+ 
+ 
+-async def search_searxng(request: SearchRequest) -> SearchResponse:
+-    """Query SearXNG and normalize the response into Quarry's response model."""
++async def search_searxng(request: SearchRequest) -> SearchResults:
++    """Query SearXNG and normalize the response into Quarry search results."""
+ 
+     params = _build_params(request)
+-    params["format"] = _format_for_searxng(request.format)
+-
+-    async with httpx.AsyncClient(
+-        base_url=settings.searxng_base_url,
+-        timeout=settings.searxng_timeout_seconds,
+-    ) as client:
+-        response = await client.post(
+-            "/search",
+-            data=params,
+-            headers={"Accept": "application/json"},
+-        )
+-        print("Request URL:", response.request.url)
+-        print("Params:", params)
+-        print("Status:", response.status_code)
+-        print("Body:", response.text)
++
++    try:
++        async with httpx.AsyncClient(
++            base_url=settings.searxng_base_url,
++            timeout=settings.searxng_timeout_seconds,
++        ) as client:
++            response = await client.post(
++                "/search",
++                data=params,
++                headers={"Accept": "application/json"},
++            )
++    except (httpx.TimeoutException, httpx.HTTPError) as exc:
++        raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
++    except Exception as exc:
++        raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
+ 
+     if response.status_code >= 400:
+-        raise HTTPException(
+-            status_code=502,
+-            detail={
+-                "status": response.status_code,
+-                "body": response.text,
+-            },
+-        )
++        raise HTTPException(status_code=502, detail="SearXNG returned an error")
++
++    try:
++        payload = response.json()
++    except ValueError as exc:
++        raise HTTPException(status_code=502, detail="Unexpected SearXNG response") from exc
+ 
+-    payload = response.json()
+     if not isinstance(payload, Mapping):
+         raise HTTPException(status_code=502, detail="Unexpected SearXNG response")
+ 
+-    return SearchResponse(results=_extract_results(payload, request))
+\ No newline at end of file
++    return SearchResults(results=_extract_results(payload))
+\ No newline at end of file
+diff --git a/pyproject.toml b/pyproject.toml
+index efbace9..c391412 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -10,6 +10,7 @@ requires-python = ">=3.12"
+ dependencies = [
+   "fastapi>=0.115,<1.0",
+   "httpx>=0.27,<1.0",
++  "crawl4ai>=0.9,<1.0",
+   "uvicorn[standard]>=0.30,<1.0",
+   "pydantic>=2.7,<3.0",
+   "redis>=5.0,<6.0",
+diff --git a/requirements.txt b/requirements.txt
+index 8fdbba2..ab6f339 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -3,3 +3,4 @@ httpx>=0.27,<1.0
+ uvicorn[standard]>=0.30,<1.0
+ pydantic>=2.7,<3.0
+ redis>=5.0,<6.0
++crawl4ai>=0.9,<1.0

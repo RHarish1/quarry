@@ -6,26 +6,11 @@ import httpx
 from fastapi import HTTPException
 
 from config.settings import settings
-from models.search import (
-    SearchFormat,
-    SearchMetadata,
-    SearchRequest,
-    SearchResponse,
-    SearchResult,
-)
-
-
-def _format_for_searxng(search_format: SearchFormat) -> str:
-    """Map the request format to the upstream SearXNG format name."""
-
-    if search_format is SearchFormat.CSS:
-        return "csv"
-
-    return search_format.value
+from models.search import SearchRequest, SearchResult, SearchResults
 
 
 def _build_params(request: SearchRequest) -> dict[str, str]:
-    """Build a minimal form payload for SearXNG."""
+    """Build a form payload for SearXNG."""
 
     params: dict[str, str] = {
         "q": request.query,
@@ -47,7 +32,7 @@ def _build_params(request: SearchRequest) -> dict[str, str]:
     return params
 
 
-def _extract_results(payload: Mapping[str, object], request: SearchRequest) -> list[SearchResult]:
+def _extract_results(payload: Mapping[str, object]) -> list[SearchResult]:
     """Convert a SearXNG JSON payload into SearchResult objects."""
 
     raw_results = payload.get("results", [])
@@ -59,58 +44,48 @@ def _extract_results(payload: Mapping[str, object], request: SearchRequest) -> l
         if not isinstance(item, Mapping):
             continue
 
+        known_keys = {"url", "title", "content"}
         results.append(
             SearchResult(
                 url=str(item.get("url", "")),
                 title=str(item.get("title", "")),
                 content=str(item.get("content", "")),
-                metadata=SearchMetadata(
-                    source="searxng",
-                    crawl_websites=False,
-                    rank_and_score_deterministically=False,
-                    compress_output_using_headroom=False,
-                    tokens_before_compression=None,
-                    tokens_after_compression=None,
-                    websites_dropped_percentage=None,
-                    compression_rate=None,
-                ),
+                metadata={key: value for key, value in item.items() if key not in known_keys},
             )
         )
 
     return results
 
 
-async def search_searxng(request: SearchRequest) -> SearchResponse:
-    """Query SearXNG and normalize the response into Quarry's response model."""
+async def search_searxng(request: SearchRequest) -> SearchResults:
+    """Query SearXNG and normalize the response into Quarry search results."""
 
     params = _build_params(request)
-    params["format"] = _format_for_searxng(request.format)
 
-    async with httpx.AsyncClient(
-        base_url=settings.searxng_base_url,
-        timeout=settings.searxng_timeout_seconds,
-    ) as client:
-        response = await client.post(
-            "/search",
-            data=params,
-            headers={"Accept": "application/json"},
-        )
-        print("Request URL:", response.request.url)
-        print("Params:", params)
-        print("Status:", response.status_code)
-        print("Body:", response.text)
+    try:
+        async with httpx.AsyncClient(
+            base_url=settings.searxng_base_url,
+            timeout=settings.searxng_timeout_seconds,
+        ) as client:
+            response = await client.post(
+                "/search",
+                data=params,
+                headers={"Accept": "application/json"},
+            )
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
 
     if response.status_code >= 400:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "status": response.status_code,
-                "body": response.text,
-            },
-        )
+        raise HTTPException(status_code=502, detail="SearXNG returned an error")
 
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Unexpected SearXNG response") from exc
+
     if not isinstance(payload, Mapping):
         raise HTTPException(status_code=502, detail="Unexpected SearXNG response")
 
-    return SearchResponse(results=_extract_results(payload, request))
+    return SearchResults(results=_extract_results(payload))

@@ -3,17 +3,28 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000
     environment:
       APP_ENV: development
       SEARXNG_BASE_URL: http://searxng:8080
       SEARXNG_TIMEOUT_SECONDS: 20
+      CRAWL_TIMEOUT_SECONDS: 30
+      CRAWL_MAX_CONCURRENCY: 4
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
-      - searxng
-      - redis
+      searxng:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   searxng:
     image: searxng/searxng
@@ -23,11 +34,26 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - redis
+      redis:
+        condition: service_started
     volumes:
       - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/').status)" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10

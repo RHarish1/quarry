@@ -1,6 +1,6 @@
 # Quarry
 
-Quarry is an LLM-native retrieval backend. It accepts a search query, performs multi-provider retrieval, crawls web pages, deterministically cleans content, reranks documents, compresses them into token-efficient context, and returns structured results through a REST API.
+Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves candidate URLs via SearXNG, crawls the matching pages with Crawl4AI, deterministically cleans the markdown, and returns structured results through a REST API.
 
 ## Architecture
 
@@ -8,17 +8,13 @@ Quarry is an LLM-native retrieval backend. It accepts a search query, performs m
 flowchart LR
   Client[Client] --> API[FastAPI API]
   API --> Pipeline[Retrieval Pipeline]
-  Pipeline --> Query[Query Normalization]
-  Pipeline --> Retrieval[Multi-Provider Retrieval]
-  Pipeline --> Crawler[Web Crawler]
-  Pipeline --> Cleaning[Deterministic Cleaning]
-  Pipeline --> Ranking[Reranking]
-  Pipeline --> Compression[Context Compression]
-  Pipeline --> Formatting[Result Formatting]
-  Pipeline --> Cache[Redis Cache]
-   API --> SearXNG[SearXNG Upstream]
-  Retrieval --> Providers[External Providers]
-  Crawler --> Web[Web Pages]
+   Pipeline --> Search[SearXNG Search]
+   Pipeline --> Crawler[Crawl4AI Crawler]
+   Pipeline --> Cleaner[Deterministic Cleaner]
+   Search --> URLs[Candidate URLs]
+   Crawler --> Document[Document]
+   Cleaner --> CleanDocument[CleanDocument]
+   API --> Response[SearchResponse]
 ```
 
 ## Quick Start
@@ -49,7 +45,17 @@ Bring up the full stack with SearXNG and Redis:
 docker compose up --build
 ```
 
+Use `docker compose`, not the API image alone, for a plug-and-play start. The Dockerfile builds only the API container; the compose file provides the required SearXNG and Redis services.
+
 The API reads `SEARXNG_BASE_URL` from the environment and normalizes the upstream JSON response into `SearchResponse`.
+
+`POST /search` returns:
+
+- `query`
+- `timings`
+- `documents`
+
+Each document is a `CleanDocument` that preserves the raw document fields and adds deterministic cleaning metrics.
 
 ## Development Setup
 
@@ -61,10 +67,11 @@ The API reads `SEARXNG_BASE_URL` from the environment and normalizes the upstrea
 - Black
 - Pytest
 - httpx
+- Crawl4AI
 
 ## API
 
-- `POST /search` accepts a `SearchRequest` body, calls SearXNG over HTTP, and returns a normalized `SearchResponse`.
+- `POST /search` accepts a `SearchRequest` body, calls SearXNG over HTTP, crawls the returned URLs, cleans the markdown, and returns a normalized `SearchResponse`.
 
 ## Project Layout
 
