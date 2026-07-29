@@ -16,6 +16,7 @@ dependencies = [
   "redis>=5.0,<6.0",
   "beautifulsoup4>=4.12,<5.0",
   "fastapi-limiter==0.1.6",
+  "markdownify>=1.2.3",
 ]
 
 [project.optional-dependencies]

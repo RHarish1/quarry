@@ -9,9 +9,10 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urljoin
-
-from bs4 import BeautifulSoup, NavigableString, Tag
+from markdownify import markdownify as md
+from bs4 import BeautifulSoup, Tag
 import httpx
+from bs4.element import NavigableString
 
 from config.settings import settings
 from models.document import Document, Documents
@@ -137,16 +138,35 @@ def _render_markdown_blocks(element: Tag) -> list[str]:
     return blocks
 
 
-def _html_to_markdown(html: str) -> str:
-    """Convert page HTML into a compact markdown-like representation."""
 
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all(list(NOISY_TAGS)):
+def _html_to_markdown(html: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+
+    for tag in soup.find_all(NOISY_TAGS):
         tag.decompose()
 
-    root = soup.find("main") or soup.find("article") or soup.body or soup
-    blocks = _render_markdown_blocks(root)
-    return normalize_markdown("\n\n".join(blocks))
+    # remove comments
+    from bs4 import Comment
+    for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
+        comment.extract()
+
+    root = (
+        soup.find("main")
+        or soup.find("article")
+        or soup.body
+        or soup
+    )
+
+    markdown = md(
+        str(root),
+        heading_style="ATX",
+        bullets="-",
+        strip=["span"],
+        escape_asterisks=False,
+        escape_underscores=False,
+    )
+
+    return normalize_markdown(markdown)
 
 
 def _extract_title_from_html(html: str, fallback_title: str) -> str:
