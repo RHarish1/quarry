@@ -10,17 +10,28 @@ from models.search import CrawlRequest, SearchRequest, SearchResponse, SearchTim
 from pipeline.cleaning.cleaner import clean_documents
 from pipeline.crawler.crawler import crawl_documents
 from pipeline.retrieval.searxng import search_searxng
+import logging
 
+logger = logging.getLogger(__name__)
 
 async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     """Run the search, crawl, and cleaning pipeline."""
-
+    
+    logger.info(
+    "Starting search pipeline for query '%s'",
+    request.query,
+    )
     total_started = perf_counter()
 
     search_started = perf_counter()
+    logger.info("Starting search stage")
     try:
         search_results = await search_searxng(request)
+        logger.info("Returned from search_searxng: %r", search_results)
+        logger.info("Type: %s", type(search_results))
+
     except Exception:
+        logger.exception("Search stage failed")
         search_results = None
     search_latency_ms = (perf_counter() - search_started) * 1000.0
 
@@ -36,7 +47,12 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
             ),
             documents=[],
         )
-
+    logger.info(
+    "Search completed: %d results (%.2f ms)",
+    len(search_results.results),
+    search_latency_ms,
+    )
+    logger.info("Starting crawl stage")
     crawl_started = perf_counter()
     try:
         crawled_documents = await crawl_documents(
@@ -49,7 +65,9 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
             )
         )
     except Exception:
+        logger.exception("Crawling stage failed")
         crawled_documents = None
+    
     crawl_latency_ms = (perf_counter() - crawl_started) * 1000.0
 
     if crawled_documents is None:
@@ -64,7 +82,12 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
             ),
             documents=[],
         )
-
+    logger.info(
+    "Crawl completed: %d documents (%.2f ms)",
+    len(crawled_documents.documents),
+    crawl_latency_ms,
+)
+    logger.info("Starting cleaning stage")
     cleaning_started = perf_counter()
     try:
         cleaned_documents = clean_documents(
@@ -74,6 +97,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
             )
         )
     except Exception:
+        logger.exception("Cleaning stage failed")
         cleaned_documents = None
     cleaning_latency_ms = (perf_counter() - cleaning_started) * 1000.0
 
@@ -89,6 +113,11 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
             ),
             documents=[],
         )
+    logger.info(
+    "Cleaning completed: %d documents (%.2f ms)",
+    len(cleaned_documents.documents),
+    cleaning_latency_ms,
+)
 
     total_request_latency_ms = (perf_counter() - total_started) * 1000.0
     return SearchResponse(

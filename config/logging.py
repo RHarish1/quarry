@@ -1,7 +1,23 @@
 """Logging configuration for Quarry."""
 
+from datetime import datetime
+from pathlib import Path
+import logging
+import sys
+
 
 def configure_logging() -> None:
-    """Configure application logging."""
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
 
-    pass
+    log_file = log_dir / f"{datetime.now():%Y-%m-%d_%H-%M-%S}.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(log_file, encoding="utf-8"),
+        ],
+        force=True,
+    )

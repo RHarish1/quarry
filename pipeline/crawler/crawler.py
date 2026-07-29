@@ -8,27 +8,24 @@ from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup, NavigableString, Tag
+import httpx
 
 from config.settings import settings
 from models.document import Document, Documents
 from models.search import CrawlRequest, SearchResult
+from pipeline.cleaning.steps import normalize_markdown
 
-CANONICAL_PATTERN = re.compile(
-    r'<link[^>]+rel=["\']canonical["\'][^>]*href=["\'](?P<href>[^"\']+)["\']',
-    re.IGNORECASE,
-)
-TITLE_PATTERN = re.compile(r"<title>(?P<title>.*?)</title>", re.IGNORECASE | re.DOTALL)
+NOISY_TAGS = {"script", "style", "noscript", "svg", "iframe", "form"}
+CONTAINER_TAGS = {"body", "main", "article", "section", "div", "header", "aside"}
+HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 
+def _load_http_client() -> type[httpx.AsyncClient]:
+    """Return the HTTP client used for fetching pages."""
 
-def _load_crawl4ai() -> tuple[Any, Any, Any, Any]:
-    """Import Crawl4AI lazily so the app remains import-safe when the package is absent."""
-
-    try:
-        from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
-    except ImportError as exc:  # pragma: no cover - exercised in packaged runtime
-        raise RuntimeError("crawl4ai is required for crawling") from exc
-
-    return AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
+    return httpx.AsyncClient
 
 
 def _fallback_document(search_result: SearchResult, status: str, reason: str) -> Document:
@@ -55,74 +52,141 @@ def _fallback_document(search_result: SearchResult, status: str, reason: str) ->
     )
 
 
-def _extract_markdown(result: Any) -> str:
-    """Extract raw markdown from a Crawl4AI result."""
+def _inline_text(element: Tag) -> str:
+    """Collapse inline HTML content into readable text."""
 
-    markdown = getattr(result, "markdown", None)
-    if markdown is None:
-        return ""
-
-    raw_markdown = getattr(markdown, "raw_markdown", None)
-    if isinstance(raw_markdown, str):
-        return raw_markdown
-
-    if isinstance(markdown, str):
-        return markdown
-
-    return str(markdown)
+    return re.sub(r"\s+", " ", element.get_text(" ", strip=True)).strip()
 
 
-def _extract_html(result: Any) -> str:
-    """Extract HTML from a Crawl4AI result."""
+def _render_markdown_blocks(element: Tag) -> list[str]:
+    """Convert a limited HTML subset into deterministic markdown-like blocks."""
 
-    html = getattr(result, "html", None)
-    return html if isinstance(html, str) else ""
+    blocks: list[str] = []
+    for child in element.children:
+        if isinstance(child, NavigableString):
+            text = re.sub(r"\s+", " ", str(child)).strip()
+            if text:
+                blocks.append(text)
+            continue
+
+        if not isinstance(child, Tag):
+            continue
+
+        name = child.name.lower()
+        if name in NOISY_TAGS:
+            continue
+
+        if name in HEADING_TAGS:
+            heading_level = int(name[1])
+            text = _inline_text(child)
+            if text:
+                blocks.append(f"{'#' * heading_level} {text}")
+            continue
+
+        if name == "p":
+            text = _inline_text(child)
+            if text:
+                blocks.append(text)
+            continue
+
+        if name == "blockquote":
+            text = _inline_text(child)
+            if text:
+                blocks.append(f"> {text}")
+            continue
+
+        if name == "pre":
+            text = child.get_text("\n", strip=True)
+            if text:
+                blocks.append("```")
+                blocks.append(text)
+                blocks.append("```")
+            continue
+
+        if name == "li":
+            text = _inline_text(child)
+            if text:
+                blocks.append(f"- {text}")
+            continue
+
+        if name in {"ul", "ol"}:
+            items = [item for item in child.find_all("li", recursive=False)]
+            for index, item in enumerate(items, start=1):
+                text = _inline_text(item)
+                if not text:
+                    continue
+
+                prefix = f"{index}." if name == "ol" else "-"
+                blocks.append(f"{prefix} {text}")
+            continue
+
+        if name == "table":
+            text = _inline_text(child)
+            if text:
+                blocks.append(text)
+            continue
+
+        if name in CONTAINER_TAGS:
+            blocks.extend(_render_markdown_blocks(child))
+            continue
+
+        text = _inline_text(child)
+        if text:
+            blocks.append(text)
+
+    return blocks
 
 
-def _extract_title(result: Any, html: str, fallback_title: str) -> str:
+def _html_to_markdown(html: str) -> str:
+    """Convert page HTML into a compact markdown-like representation."""
+
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all(list(NOISY_TAGS)):
+        tag.decompose()
+
+    root = soup.find("main") or soup.find("article") or soup.body or soup
+    blocks = _render_markdown_blocks(root)
+    return normalize_markdown("\n\n".join(blocks))
+
+
+def _extract_title_from_html(html: str, fallback_title: str) -> str:
     """Preserve the page title when available."""
 
-    metadata = getattr(result, "metadata", None)
-    if isinstance(metadata, dict):
-        title = metadata.get("title") or metadata.get("og:title")
-        if isinstance(title, str) and title.strip():
-            return title.strip()
+    soup = BeautifulSoup(html, "html.parser")
+    title_tag = soup.find("title")
+    if title_tag:
+        title = re.sub(r"\s+", " ", title_tag.get_text(" ", strip=True)).strip()
+        if title:
+            return title
 
-    match = TITLE_PATTERN.search(html)
-    if match:
-        title = re.sub(r"\s+", " ", match.group("title")).strip()
+    og_title = soup.find("meta", attrs={"property": "og:title"})
+    if og_title and isinstance(og_title.get("content"), str):
+        title = re.sub(r"\s+", " ", og_title.get("content", "")).strip()
         if title:
             return title
 
     return fallback_title
 
 
-def _extract_canonical_url(result: Any, html: str, fallback_url: str) -> str:
+def _extract_canonical_url_from_html(html: str, fallback_url: str) -> str:
     """Preserve the canonical URL when available."""
 
-    metadata = getattr(result, "metadata", None)
-    if isinstance(metadata, dict):
-        canonical_url = metadata.get("canonical_url") or metadata.get("canonicalURL")
-        if isinstance(canonical_url, str) and canonical_url.strip():
-            return canonical_url.strip()
-
-    match = CANONICAL_PATTERN.search(html)
-    if match:
-        canonical_url = match.group("href").strip()
+    soup = BeautifulSoup(html, "html.parser")
+    canonical_tag = soup.find("link", attrs={"rel": lambda value: value and "canonical" in value})
+    if canonical_tag and isinstance(canonical_tag.get("href"), str):
+        canonical_url = canonical_tag.get("href", "").strip()
         if canonical_url:
-            return canonical_url
+            return urljoin(fallback_url, canonical_url)
 
     return fallback_url
 
 
-def _extract_content_type(result: Any) -> str:
+def _extract_content_type(response: httpx.Response) -> str:
     """Preserve the response content type when available."""
 
-    response_headers = getattr(result, "response_headers", None)
-    if isinstance(response_headers, dict):
-        content_type = response_headers.get("content-type") or response_headers.get("Content-Type")
-        if isinstance(content_type, str) and content_type.strip():
-            return content_type.split(";", 1)[0].strip()
+    content_type = response.headers.get("content-type") or response.headers.get("Content-Type")
+    if isinstance(content_type, str) and content_type.strip():
+        return content_type.split(";", 1)[0].strip()
 
     return "text/html"
 
@@ -149,63 +213,54 @@ def _result_to_document(search_result: SearchResult) -> Document:
 async def _crawl_search_result(search_result: SearchResult, crawl_request: CrawlRequest) -> Document | None:
     """Crawl a single search hit into a raw document."""
 
-    try:
-        AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig = _load_crawl4ai()
-    except Exception:
-        return _fallback_document(search_result, "crawl_unavailable", "crawl4ai unavailable")
-
-    browser_config = BrowserConfig(headless=True, text_mode=True)
-    run_config = CrawlerRunConfig(
-        check_robots_txt=True,
-        page_timeout=int(crawl_request.timeout_seconds * 1000),
-        wait_until="domcontentloaded",
-        cache_mode=CacheMode.ENABLED if crawl_request.enable_caching else CacheMode.BYPASS,
-    )
-
     crawl_started = perf_counter()
     try:
-        async with AsyncWebCrawler(config=browser_config) as crawler:
-            result = await asyncio.wait_for(
-                crawler.arun(url=search_result.url, config=run_config),
+        http_client = _load_http_client()
+        async with http_client(follow_redirects=True, timeout=crawl_request.timeout_seconds) as client:
+            response = await asyncio.wait_for(
+                client.get(
+                    search_result.url,
+                    headers={
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "User-Agent": "Quarry/1.0",
+                    },
+                ),
                 timeout=crawl_request.timeout_seconds,
             )
     except (asyncio.TimeoutError, TimeoutError):
         return _fallback_document(search_result, "timeout", "crawl timed out")
+    except httpx.HTTPError:
+        return _fallback_document(search_result, "crawl_failed", "http fetch failed")
     except Exception:
         return _fallback_document(search_result, "crawl_failed", "crawl execution failed")
 
     crawl_latency_ms = (perf_counter() - crawl_started) * 1000.0
-    if not getattr(result, "success", False):
-        error_message = str(getattr(result, "error_message", "")).lower()
-        if "robots" in error_message:
-            return _fallback_document(search_result, "robots_blocked", "blocked by robots.txt")
+    if response.status_code >= 400:
+        return _fallback_document(search_result, "http_error", f"http {response.status_code}")
 
-        return _fallback_document(search_result, "crawl_failed", error_message or "crawl failed")
+    html = response.text
+    markdown = _html_to_markdown(html)
+    if not markdown.strip():
+        markdown = search_result.content
 
-    html = _extract_html(result)
-    markdown = _extract_markdown(result)
-    metadata = getattr(result, "metadata", None)
-    response_headers = getattr(result, "response_headers", None)
     document_metadata: dict[str, Any] = {}
     if isinstance(search_result.metadata, dict):
         document_metadata.update(search_result.metadata)
-    if isinstance(metadata, dict):
-        document_metadata.update(metadata)
-    if isinstance(response_headers, dict):
-        document_metadata["response_headers"] = response_headers
+    document_metadata["source"] = "fetched_html"
+    document_metadata["final_url"] = str(response.url)
 
     return Document(
         id=uuid4().hex,
-        url=str(getattr(result, "url", search_result.url)),
-        canonical_url=_extract_canonical_url(result, html, search_result.url),
-        title=_extract_title(result, html, search_result.title),
+        url=str(response.url),
+        canonical_url=_extract_canonical_url_from_html(html, str(response.url)),
+        title=_extract_title_from_html(html, search_result.title),
         markdown=markdown,
         html=html or None,
         metadata=document_metadata,
         crawl_timestamp=datetime.now(timezone.utc),
         crawl_latency_ms=crawl_latency_ms,
         crawl_status="success",
-        content_type=_extract_content_type(result),
+        content_type=_extract_content_type(response),
     )
 
 

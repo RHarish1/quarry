@@ -3,7 +3,9 @@
 from fastapi import FastAPI
 
 from api.routes.search import router as search_router
+from config.logging import configure_logging
 
+configure_logging()
 app = FastAPI(title="Quarry")
 
 

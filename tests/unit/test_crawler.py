@@ -6,113 +6,77 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import httpx
+
 from models.search import CrawlRequest, SearchResult, SearchResults
 from pipeline.crawler import crawler as crawler_module
 
 
 @dataclass
-class FakeMarkdown:
-    raw_markdown: str
-
-
-class FakeCrawlResult:
+class FakeResponse:
     def __init__(
         self,
         *,
-        success: bool,
+        status_code: int,
         url: str,
-        markdown: str,
         html: str,
-        metadata: dict[str, object] | None = None,
-        response_headers: dict[str, str] | None = None,
-        error_message: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
-        self.success = success
+        self.status_code = status_code
         self.url = url
-        self.markdown = FakeMarkdown(markdown)
-        self.html = html
-        self.metadata = metadata or {}
-        self.response_headers = response_headers or {}
-        self.error_message = error_message
+        self.text = html
+        self.headers = headers or {}
 
 
-class FakeRunConfig:
-    def __init__(self, **kwargs) -> None:
-        self.__dict__.update(kwargs)
+class FakeAsyncClient:
+    last_requested_url: str | None = None
 
+    def __init__(self, *args, **kwargs) -> None:
+        self.args = args
+        self.kwargs = kwargs
 
-class FakeBrowserConfig:
-    def __init__(self, **kwargs) -> None:
-        self.__dict__.update(kwargs)
-
-
-class FakeCacheMode:
-    ENABLED = "enabled"
-    BYPASS = "bypass"
-
-
-class FakeAsyncWebCrawler:
-    last_run_config: FakeRunConfig | None = None
-
-    def __init__(self, config=None) -> None:
-        self.config = config
-
-    async def __aenter__(self) -> "FakeAsyncWebCrawler":
+    async def __aenter__(self) -> "FakeAsyncClient":
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
 
-    async def arun(self, url: str, config: FakeRunConfig):
-        FakeAsyncWebCrawler.last_run_config = config
+    async def get(self, url: str, headers: dict[str, str] | None = None):
+        FakeAsyncClient.last_requested_url = url
         if url.endswith("/good"):
-            return FakeCrawlResult(
-                success=True,
+            return FakeResponse(
+                status_code=200,
                 url="https://example.com/good",
-                markdown="# Title\n\nBody",
                 html=(
                     "<html><head><title>Meta Title</title>"
                     "<link rel='canonical' href='https://example.com/canonical'/></head>"
-                    "<body>Body</body></html>"
+                    "<body><main><h1>Title</h1><p>Body</p></main></body></html>"
                 ),
-                metadata={"title": "Meta Title"},
-                response_headers={"content-type": "text/html; charset=utf-8"},
-            )
-
-        if url.endswith("/robots"):
-            return FakeCrawlResult(
-                success=False,
-                url=url,
-                markdown="",
-                html="",
-                error_message="Blocked by robots.txt",
+                headers={"content-type": "text/html; charset=utf-8"},
             )
 
         if url.endswith("/slow"):
             await asyncio.sleep(0.05)
-            return FakeCrawlResult(
-                success=True,
+            return FakeResponse(
+                status_code=200,
                 url=url,
-                markdown="slow",
-                html="<html></html>",
+                html="<html><body><main><p>slow</p></main></body></html>",
             )
 
-        return FakeCrawlResult(success=False, url=url, markdown="", html="", error_message="boom")
+        if url.endswith("/missing"):
+            return FakeResponse(status_code=404, url=url, html="<html></html>")
 
-
-def _fake_load_crawl4ai():
-    return FakeAsyncWebCrawler, FakeBrowserConfig, FakeCacheMode, FakeRunConfig
+        raise httpx.HTTPError("boom")
 
 
 def test_crawler_skips_failures_and_preserves_metadata(monkeypatch) -> None:
-    monkeypatch.setattr(crawler_module, "_load_crawl4ai", _fake_load_crawl4ai)
+    monkeypatch.setattr(crawler_module.httpx, "AsyncClient", FakeAsyncClient)
 
     crawl_request = CrawlRequest(
         search_results=SearchResults(
             results=[
                 SearchResult(url="https://example.com/good", title="Good", content="Snippet", metadata={"engine": "google"}),
-                SearchResult(url="https://example.com/robots", title="Robots", content="Snippet", metadata={"engine": "google"}),
-                SearchResult(url="https://example.com/bad", title="Bad", content="Snippet", metadata={"engine": "google"}),
+                SearchResult(url="https://example.com/missing", title="Missing", content="Snippet", metadata={"engine": "google"}),
             ]
         ),
         crawl_websites=True,
@@ -122,19 +86,19 @@ def test_crawler_skips_failures_and_preserves_metadata(monkeypatch) -> None:
     )
 
     documents = asyncio.run(crawler_module.crawl_documents(crawl_request))
-    assert len(documents.documents) == 3
+    assert len(documents.documents) == 2
     document = documents.documents[0]
     assert document.title == "Meta Title"
     assert document.canonical_url == "https://example.com/canonical"
     assert document.content_type == "text/html"
     assert document.metadata["engine"] == "google"
-    assert FakeAsyncWebCrawler.last_run_config.check_robots_txt is True
-    assert documents.documents[1].crawl_status == "robots_blocked"
-    assert documents.documents[2].crawl_status == "crawl_failed"
+    assert document.markdown == "# Title\n\nBody"
+    assert FakeAsyncClient.last_requested_url == "https://example.com/missing"
+    assert documents.documents[1].crawl_status == "http_error"
 
 
 def test_crawler_times_out_gracefully(monkeypatch) -> None:
-    monkeypatch.setattr(crawler_module, "_load_crawl4ai", _fake_load_crawl4ai)
+    monkeypatch.setattr(crawler_module.httpx, "AsyncClient", FakeAsyncClient)
 
     crawl_request = CrawlRequest(
         search_results=SearchResults(
@@ -154,7 +118,7 @@ def test_crawler_times_out_gracefully(monkeypatch) -> None:
 
 
 def test_crawler_passthrough_when_disabled(monkeypatch) -> None:
-    monkeypatch.setattr(crawler_module, "_load_crawl4ai", _fake_load_crawl4ai)
+    monkeypatch.setattr(crawler_module.httpx, "AsyncClient", FakeAsyncClient)
 
     crawl_request = CrawlRequest(
         search_results=SearchResults(

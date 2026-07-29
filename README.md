@@ -1,6 +1,6 @@
 # Quarry
 
-Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves candidate URLs via SearXNG, crawls the matching pages with Crawl4AI, deterministically cleans the markdown, and returns structured results through a REST API.
+Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves candidate URLs via SearXNG, fetches and parses the matching pages over HTTP, deterministically cleans the markdown, and returns structured results through a REST API.
 
 ## Architecture
 
@@ -67,7 +67,7 @@ Each document is a `CleanDocument` that preserves the raw document fields and ad
 - Black
 - Pytest
 - httpx
-- Crawl4AI
+- BeautifulSoup4
 
 ## API
 

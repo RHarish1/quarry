@@ -4,7 +4,9 @@ from fastapi import APIRouter
 
 from models.search import SearchRequest, SearchResponse, SearchTimings
 from pipeline.pipeline import execute_search_pipeline
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
