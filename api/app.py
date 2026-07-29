@@ -4,9 +4,17 @@ from fastapi import FastAPI
 
 from api.routes.search import router as search_router
 from config.logging import configure_logging
+from contextlib import asynccontextmanager
+from pipeline.cache import close_redis
 
 configure_logging()
-app = FastAPI(title="Quarry")
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    await close_redis()
+
+app = FastAPI(title="Quarry", lifespan=lifespan)
 
 
 @app.get("/")

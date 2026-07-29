@@ -11,12 +11,23 @@ from pipeline.cleaning.cleaner import clean_documents
 from pipeline.crawler.crawler import crawl_documents
 from pipeline.retrieval.searxng import search_searxng
 import logging
+from .cache import get, set, make_cache_key
 
 logger = logging.getLogger(__name__)
 
 async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     """Run the search, crawl, and cleaning pipeline."""
-    
+    key = make_cache_key(request)
+
+    if request.enable_caching:
+        logger.info("Cache Check")
+        cached = await get(key)
+        if cached is not None:
+            logger.info("Cache Hit!")
+            return cached
+        logger.info("Cache Miss!")
+
+
     logger.info(
     "Starting search pipeline for query '%s'",
     request.query,
@@ -120,7 +131,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
 )
 
     total_request_latency_ms = (perf_counter() - total_started) * 1000.0
-    return SearchResponse(
+    response= SearchResponse(
         query=request.query,
         timings=SearchTimings(
             search_latency_ms=search_latency_ms,
@@ -130,3 +141,6 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
         ),
         documents=cleaned_documents.documents,
     )
+    if request.enable_caching and response.documents:
+        await set(key, response)
+    return response

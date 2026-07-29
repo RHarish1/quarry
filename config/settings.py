@@ -20,6 +20,10 @@ class Settings:
     crawl_max_concurrency: int = field(
         default_factory=lambda: int(os.getenv("CRAWL_MAX_CONCURRENCY", "4"))
     )
+    redis_url: str = field(
+        default_factory=lambda: os.getenv("REDIS_URL", "redis://redis:6379/0")
+    )
+
 
 
 settings = Settings()
