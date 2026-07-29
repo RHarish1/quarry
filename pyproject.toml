@@ -14,6 +14,8 @@ dependencies = [
   "uvicorn[standard]>=0.30,<1.0",
   "pydantic>=2.7,<3.0",
   "redis>=5.0,<6.0",
+  "beautifulsoup4>=4.12,<5.0",
+  "fastapi-limiter==0.1.6",
 ]
 
 [project.optional-dependencies]
