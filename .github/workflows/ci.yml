@@ -13,6 +13,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+      searxng:
+        image: searxng/searxng:latest
+        ports:
+          - 8080:8080
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,14 +47,3 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
-
-services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - 6379:6379
-
-  searxng:
-    image: searxng/searxng:latest
-    ports:
-      - 8080:8080
