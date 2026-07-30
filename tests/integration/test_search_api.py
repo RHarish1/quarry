@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from api.app import app
+from api.middleware import DEFAULT_RATE_LIMIT
 from models.clean_document import CleanDocument, CleanDocuments
 from models.document import Document, Documents
 from models.search import SearchResult, SearchResults, SearchTimings
@@ -75,25 +76,29 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
     monkeypatch.setattr(pipeline_module, "crawl_documents", fake_crawl_documents)
     monkeypatch.setattr(pipeline_module, "clean_documents", fake_clean_documents)
 
-    client = TestClient(app)
-    response = client.post(
-        "/search",
-        json={
-            "query": "quarry",
-            "cleaning_level": 1,
-            "crawl_websites": True,
-            "enable_caching": False,
-            "compress_output_using_headroom": False,
-            "flexible_formatting": "default_with_metadata",
-            "enhance_query": False,
-            "rank_and_score_deterministically": False,
-            "time_range": "day",
-            "language": "en",
-            "engines": ["google"],
-            "categories": ["general"],
-            "format": "json",
-        },
-    )
+    app.dependency_overrides[DEFAULT_RATE_LIMIT.dependency] = lambda: None
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/search",
+            json={
+                "query": "quarry",
+                "cleaning_level": 1,
+                "crawl_websites": True,
+                "enable_caching": False,
+                "compress_output_using_headroom": False,
+                "flexible_formatting": "default_with_metadata",
+                "enhance_query": False,
+                "rank_and_score_deterministically": False,
+                "time_range": "day",
+                "language": "en",
+                "engines": ["google"],
+                "categories": ["general"],
+                "format": "json",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(DEFAULT_RATE_LIMIT.dependency, None)
 
     assert response.status_code == 200
     payload = response.json()

@@ -1,3 +1,7 @@
+![CI](https://github.com/RHarish1/quarry/actions/workflows/ci.yml/badge.svg)
+![Docker](https://github.com/RHarish1/quarry/actions/workflows/docker.yml/badge.svg)
+![CodeQL](https://github.com/RHarish1/quarry/actions/workflows/codeql.yml/badge.svg)
+
 # Quarry
 
 Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves candidate URLs via SearXNG, fetches and parses the matching pages over HTTP, deterministically cleans the markdown, and returns structured results through a REST API.

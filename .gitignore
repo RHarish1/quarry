@@ -12,3 +12,4 @@ build/
 htmlcov/
 .coverage
 .crawl4ai/
+logs/
