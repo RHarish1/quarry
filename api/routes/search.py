@@ -5,12 +5,13 @@ from fastapi import APIRouter
 from models.search import SearchRequest, SearchResponse, SearchTimings
 from pipeline.pipeline import execute_search_pipeline
 import logging
+from api.middleware import DEFAULT_RATE_LIMIT
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post("/search", response_model=SearchResponse,dependencies=[DEFAULT_RATE_LIMIT])
 async def search(request: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
 
