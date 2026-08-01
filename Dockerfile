@@ -14,6 +14,7 @@ RUN uv sync --no-dev --frozen --no-install-project
 COPY . .
 
 RUN uv sync --no-dev --frozen
+RUN uv run playwright install --with-deps chromium
 
 EXPOSE 8000
 

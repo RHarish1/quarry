@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+<<<<<<< HEAD
 import re
 from datetime import UTC, datetime
 from time import perf_counter
@@ -14,11 +15,19 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 from bs4.element import NavigableString
 from markdownify import markdownify as md
+=======
+import logging
+from datetime import datetime, timezone
+from time import perf_counter
+from uuid import uuid4
+>>>>>>> origin/main
 
 from models.document import Document, Documents
 from models.search import CrawlRequest, SearchResult
-from pipeline.cleaning.steps import normalize_markdown
+from pipeline.crawler.fetcher import fetch_raw_document
+from pipeline.crawler.manager import ExtractorManager
 
+<<<<<<< HEAD
 NOISY_TAGS = {"script", "style", "noscript", "svg", "iframe", "form"}
 CONTAINER_TAGS = {"body", "main", "article", "section", "div", "header", "aside"}
 HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
@@ -40,6 +49,20 @@ def _fallback_document(
     if isinstance(search_result.metadata, dict):
         metadata.update(search_result.metadata)
     metadata.update({"crawl_fallback_reason": reason})
+=======
+logger = logging.getLogger(__name__)
+
+
+def _fallback_document(search_result: SearchResult, status: str, reason: str) -> Document:
+    """Create a conservative document fallback when fetching or extraction fails."""
+
+    now = datetime.now(timezone.utc)
+    metadata = {
+        **search_result.metadata,
+        "source": "search_provider",
+        "crawl_fallback_reason": reason,
+    }
+>>>>>>> origin/main
 
     return Document(
         id=uuid4().hex,
@@ -56,6 +79,7 @@ def _fallback_document(
     )
 
 
+<<<<<<< HEAD
 def _inline_text(element: Tag) -> str:
     """Collapse inline HTML content into readable text."""
 
@@ -214,6 +238,9 @@ def _extract_content_type(response: httpx.Response) -> str:
 
 
 def _result_to_document(search_result: SearchResult) -> Document:
+=======
+def _search_result_to_document(search_result: SearchResult) -> Document:
+>>>>>>> origin/main
     """Convert a search hit directly into a raw document when crawling is disabled."""
 
     now = datetime.now(UTC)
@@ -233,6 +260,7 @@ def _result_to_document(search_result: SearchResult) -> Document:
 
 
 async def _crawl_search_result(
+<<<<<<< HEAD
     search_result: SearchResult, crawl_request: CrawlRequest
 ) -> Document | None:
     """Crawl a single search hit into a raw document."""
@@ -291,7 +319,34 @@ async def _crawl_search_result(
         crawl_latency_ms=crawl_latency_ms,
         crawl_status="success",
         content_type=_extract_content_type(response),
+=======
+    search_result: SearchResult,
+    crawl_request: CrawlRequest,
+    manager: ExtractorManager,
+) -> Document:
+    """Fetch and extract a single search hit into a raw document."""
+
+    crawl_started = perf_counter()
+    try:
+        raw_document = await fetch_raw_document(search_result, timeout_seconds=crawl_request.timeout_seconds)
+    except Exception as exc:
+        logger.exception("crawler.fetch_failed", extra={"url": search_result.url})
+        return _fallback_document(search_result, "fetch_failed", str(exc))
+
+    try:
+        extracted_document = await manager.extract(raw_document)
+    except Exception as exc:
+        logger.exception("crawler.extract_failed", extra={"url": search_result.url})
+        return _fallback_document(search_result, "extract_failed", str(exc))
+
+    crawl_latency_ms = (perf_counter() - crawl_started) * 1000.0
+    document = extracted_document.to_document(
+        raw_document,
+        crawl_status=extracted_document.extraction_method or "success",
+>>>>>>> origin/main
     )
+    document.crawl_latency_ms = crawl_latency_ms
+    return document
 
 
 async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
@@ -302,18 +357,24 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
 
     if not crawl_request.crawl_websites:
         return Documents(
+<<<<<<< HEAD
             documents=[
                 _result_to_document(search_result)
                 for search_result in crawl_request.search_results.results
             ]
+=======
+            documents=[_search_result_to_document(search_result) for search_result in crawl_request.search_results.results]
+>>>>>>> origin/main
         )
 
+    manager = ExtractorManager()
     semaphore = asyncio.Semaphore(max(1, crawl_request.max_concurrency))
 
-    async def guarded_crawl(search_result: SearchResult) -> Document | None:
+    async def guarded_crawl(search_result: SearchResult) -> Document:
         async with semaphore:
-            return await _crawl_search_result(search_result, crawl_request)
+            return await _crawl_search_result(search_result, crawl_request, manager)
 
+<<<<<<< HEAD
     results = await asyncio.gather(
         *(
             guarded_crawl(search_result)
@@ -324,3 +385,11 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
 
     documents = [document for document in results if document is not None]
     return Documents(documents=documents)
+=======
+    documents = await asyncio.gather(
+        *(guarded_crawl(search_result) for search_result in crawl_request.search_results.results),
+        return_exceptions=False,
+    )
+
+    return Documents(documents=list(documents))
+>>>>>>> origin/main
