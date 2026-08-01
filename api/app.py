@@ -20,17 +20,37 @@ async def lifespan(app):
     await close_redis()
 
 
-app = FastAPI(title="Quarry", lifespan=lifespan)
+app = FastAPI(
+    title="Quarry",
+    summary="Deterministic web retrieval, extraction, cleaning, and compression.",
+    description=(
+        "Quarry searches SearXNG, optionally crawls and ranks web pages, then "
+        "returns cleaned Markdown documents. Open the **Search** endpoint for "
+        "field-by-field behavior and a ready-to-run example."
+    ),
+    version="0.1.0",
+    openapi_tags=[
+        {
+            "name": "Search",
+            "description": "Retrieve, optionally crawl/rank, clean, and optionally compress web documents.",
+        },
+        {
+            "name": "System",
+            "description": "Service metadata and liveness checks.",
+        },
+    ],
+    lifespan=lifespan,
+)
 
 
-@app.get("/")
+@app.get("/", tags=["System"], summary="Get service metadata")
 async def root() -> dict[str, str]:
     """Return basic service metadata."""
 
     return {"service": "Quarry"}
 
 
-@app.get("/health")
+@app.get("/health", tags=["System"], summary="Check API liveness")
 async def health() -> dict[str, str]:
     """Return a lightweight health response."""
 

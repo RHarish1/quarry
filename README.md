@@ -9,20 +9,32 @@ Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves 
 ## Architecture
 
 ```mermaid
-flowchart LR
-  Client[Client] --> API[FastAPI API]
-  API --> Limit[Redis-backed rate limit]
-  Limit --> Pipeline[Search pipeline]
-  Pipeline --> Cache{Caching enabled?}
-  Cache -->|Hit| Response[SearchResponse]
-  Cache -->|Miss| Normalize[Optional query normalization]
-  Normalize --> Search[SearXNG]
-  Search --> Crawl[Fetch, extract, and optionally rank]
-  Crawl --> Clean[Deterministic cleaning]
-  Clean --> Compress[Optional deterministic compression]
-  Clean --> Cache
-  Compress --> Cache
-  Compress --> Response
+flowchart TD
+  Client([Client]) --> API[POST /search]
+  API --> Limit{Within 30 requests/minute?}
+  Limit -->|No| Throttle[429 response]
+  Limit -->|Yes| Cache{Caching enabled and hit?}
+  Cache -->|Yes| Cached[Return cached SearchResponse]
+  Cache -->|No| Normalize[Optional query normalization]
+  Normalize --> Retrieve[SearXNG retrieval]
+  Retrieve --> Crawl{crawl_websites?}
+  Crawl -->|No| Snippets[Use SearXNG snippets]
+  Crawl -->|Yes| Rank{Deterministic ranking?}
+  Rank -->|No| All[Fetch and extract all candidates]
+  Rank -->|Yes| Filter[Filter candidates]
+  Filter --> Batch[Crawl next candidate batch]
+  Batch --> Target{Enough qualified documents?}
+  Target -->|No, candidates remain| Batch
+  Target -->|Yes or exhausted| Selected[Sort and select documents]
+  Snippets --> Clean[Deterministic cleaning]
+  All --> Clean
+  Selected --> Clean
+  Clean --> Compress{compress_output?}
+  Compress -->|Yes| Reduce[Token-budgeted compression]
+  Compress -->|No| Store{Cache response?}
+  Reduce --> Store
+  Store --> Response([SearchResponse + timings])
+  Store -->|Yes| Redis[(Redis)]
 ```
 
 ## Quick Start

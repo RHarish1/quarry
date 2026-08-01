@@ -99,9 +99,26 @@ run without reaching the threshold, the highest-scoring output is used. A fetch
 or extraction exception instead produces a fallback document that retains the
 SearXNG snippet and records the reason in metadata.
 
-When both `rank_and_score_deterministically` and `crawl_websites` are true,
-candidate URLs are filtered, crawled in recall batches, scored by extraction
-quality, and returned in descending quality order up to `target_documents`.
+### Conditional crawling and ranking
+
+| `crawl_websites` | `rank_and_score_deterministically` | Behavior |
+| --- | --- | --- |
+| `false` | Either value | Does not fetch URLs. Returns every SearXNG snippet with `crawl_status: "skipped"`. |
+| `true` | `false` | Fetches and extracts every SearXNG result, subject to the crawl concurrency limit. |
+| `true` | `true` | Filters candidates, crawls them in batches, and accepts only documents whose quality score is at least `0.65`. |
+
+In ranked mode, each batch contains up to `CRAWL_MAX_CONCURRENCY` candidates.
+After a batch completes, Quarry stops immediately when the number of accepted
+documents reaches `target_documents`, even if unprocessed candidates remain.
+If the target has not been reached and candidates remain, it crawls the next
+batch. If candidates are exhausted first, Quarry returns every accepted document
+it found. Finally, it sorts accepted documents by quality score descending and
+returns at most `target_documents`.
+
+Candidate filtering removes non-HTTP URLs, duplicate normalized URLs, configured
+blocked domains, common static-file extensions, and paths such as login,
+privacy, cookie, terms, feeds, tags, and categories. This filtering only occurs
+in ranked mode; normal crawling attempts every SearXNG result.
 
 ## 6. Cleaning and Metrics
 
