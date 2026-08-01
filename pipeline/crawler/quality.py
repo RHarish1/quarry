@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from lxml import html as lxml_html
 from lxml.etree import ParserError
 
+from models.document import Document
 from pipeline.crawler.types import ExtractedDocument, RawDocument
 
 WORD_PATTERN = re.compile(r"\w+|[^\w\s]")
@@ -80,6 +81,27 @@ def _bounded_quality(value: float, target: float) -> float:
         return 1.0
 
     return max(0.0, min(value / target, 1.0))
+
+
+def filter_quality(
+    documents: list[Document],
+    minimum_score: float,
+) -> list[Document]:
+    return [
+        document
+        for document in documents
+        if document.metadata.get("quality_score", 0.0) >= minimum_score
+    ]
+
+
+def sort_quality(
+    documents: list[Document],
+) -> list[Document]:
+    return sorted(
+        documents,
+        key=lambda document: document.metadata.get("quality_score", 0.0),
+        reverse=True,
+    )
 
 
 def score_extraction(

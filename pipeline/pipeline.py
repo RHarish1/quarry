@@ -10,6 +10,8 @@ from models.clean_document import CleanRequest
 from models.search import CrawlRequest, SearchRequest, SearchResponse, SearchTimings
 from pipeline.cleaning.cleaner import clean_documents
 from pipeline.crawler.crawler import crawl_documents
+from pipeline.ranking.constants import DEFAULT_TARGET_DOCUMENTS
+from pipeline.ranking.manager import rank_documents
 from pipeline.retrieval.searxng import search_searxng
 
 from .cache import get, make_cache_key, set
@@ -67,15 +69,22 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     logger.info("Starting crawl stage")
     crawl_started = perf_counter()
     try:
-        crawled_documents = await crawl_documents(
-            CrawlRequest(
-                search_results=search_results,
-                crawl_websites=request.crawl_websites,
-                enable_caching=request.enable_caching,
-                timeout_seconds=settings.crawl_timeout_seconds,
-                max_concurrency=settings.crawl_max_concurrency,
-            )
+        crawl_request = CrawlRequest(
+            search_results=search_results,
+            crawl_websites=request.crawl_websites,
+            enable_caching=request.enable_caching,
+            timeout_seconds=settings.crawl_timeout_seconds,
+            max_concurrency=settings.crawl_max_concurrency,
         )
+
+        if request.rank_and_score_deterministically and request.crawl_websites:
+            crawled_documents = await rank_documents(
+                search_results,
+                target_documents=DEFAULT_TARGET_DOCUMENTS,
+                crawl_request=crawl_request,
+            )
+        else:
+            crawled_documents = await crawl_documents(crawl_request)
     except Exception:
         logger.exception("Crawling stage failed")
         crawled_documents = None
