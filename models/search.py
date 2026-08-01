@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from models.clean_document import CleanDocument
-
+from pipeline.ranking.constants import DEFAULT_TARGET_DOCUMENTS
 
 class CleaningLevel(IntEnum):
     """Cleaning intensity levels."""
@@ -52,6 +52,7 @@ class SearchRequest(BaseModel):
     crawl_websites: bool = False
     enable_caching: bool = False
     compress_output_using_headroom: bool = False
+    target_documents: int = DEFAULT_TARGET_DOCUMENTS
     enhance_query: bool = False
     rank_and_score_deterministically: bool = False
     time_range: TimeRange | None = None

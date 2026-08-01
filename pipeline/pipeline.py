@@ -80,7 +80,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
         if request.rank_and_score_deterministically and request.crawl_websites:
             crawled_documents = await rank_documents(
                 search_results,
-                target_documents=DEFAULT_TARGET_DOCUMENTS,
+                target_documents=request.target_documents,
                 crawl_request=crawl_request,
             )
         else:
