@@ -19,8 +19,12 @@ async def _render_html(url: str, timeout_seconds: float) -> str:
         browser = await playwright.chromium.launch(headless=True)
         try:
             page = await browser.new_page(viewport={"width": 1440, "height": 1200})
-            await page.goto(url, wait_until="networkidle", timeout=int(timeout_seconds * 1000))
-            await page.wait_for_load_state("networkidle", timeout=int(timeout_seconds * 1000))
+            await page.goto(
+                url, wait_until="networkidle", timeout=int(timeout_seconds * 1000)
+            )
+            await page.wait_for_load_state(
+                "networkidle", timeout=int(timeout_seconds * 1000)
+            )
             return await page.content()
         finally:
             await browser.close()
@@ -31,16 +35,25 @@ class PlaywrightTrafilaturaExtractor(BaseExtractor):
 
     name = "playwright_trafilatura"
 
-    async def extract(self, raw_document: RawDocument, html: str | None = None) -> ExtractionResult:
+    async def extract(
+        self, raw_document: RawDocument, html: str | None = None
+    ) -> ExtractionResult:
         started = perf_counter()
         try:
-            rendered_html = await _render_html(raw_document.final_url, timeout_seconds=max(raw_document.fetch_duration_ms / 1000.0, 30.0))
-            title, markdown, metadata = await _extract_with_trafilatura(rendered_html, raw_document.final_url)
+            rendered_html = await _render_html(
+                raw_document.final_url,
+                timeout_seconds=max(raw_document.fetch_duration_ms / 1000.0, 30.0),
+            )
+            title, markdown, metadata = await _extract_with_trafilatura(
+                rendered_html, raw_document.final_url
+            )
             source_html = rendered_html
-        except Exception as exc: # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             # Any rendering failure falls back to the original HTML.
             rendered_html = html or raw_document.raw_html
-            title, markdown, metadata = await _extract_with_trafilatura(rendered_html, raw_document.final_url)
+            title, markdown, metadata = await _extract_with_trafilatura(
+                rendered_html, raw_document.final_url
+            )
             metadata = {**metadata, "render_error": str(exc)}
             source_html = rendered_html
 

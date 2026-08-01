@@ -21,7 +21,9 @@ class FakeExtractor(BaseExtractor):
     title: str
     method: str
 
-    async def extract(self, raw_document: RawDocument, html: str | None = None) -> ExtractedDocument:
+    async def extract(
+        self, raw_document: RawDocument, html: str | None = None
+    ) -> ExtractedDocument:
         plain_text = self.markdown.replace("#", "").replace("-", " ").strip()
         return ExtractedDocument(
             title=self.title,
@@ -113,7 +115,9 @@ def test_extractor_manager_falls_back_to_later_extractor() -> None:
     )
     manager = ExtractorManager(
         extractors=[
-            FakeExtractor(name="primary", markdown="# nav", title="Nav", method="trafilatura"),
+            FakeExtractor(
+                name="primary", markdown="# nav", title="Nav", method="trafilatura"
+            ),
             FakeExtractor(
                 name="fallback",
                 markdown=(

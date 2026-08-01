@@ -26,7 +26,9 @@ def _load_http_client() -> type[httpx.AsyncClient]:
 
     return httpx.AsyncClient
 
+
 logger = logging.getLogger(__name__)
+
 
 def _fallback_document(
     search_result: SearchResult, status: str, reason: str
@@ -38,7 +40,6 @@ def _fallback_document(
     if isinstance(search_result.metadata, dict):
         metadata.update(search_result.metadata)
     metadata.update({"crawl_fallback_reason": reason})
-
 
     return Document(
         id=uuid4().hex,
@@ -83,7 +84,9 @@ async def _crawl_search_result(
 
     crawl_started = perf_counter()
     try:
-        raw_document = await fetch_raw_document(search_result, timeout_seconds=crawl_request.timeout_seconds)
+        raw_document = await fetch_raw_document(
+            search_result, timeout_seconds=crawl_request.timeout_seconds
+        )
     except Exception as exc:
         logger.exception("crawler.fetch_failed", extra={"url": search_result.url})
         return _fallback_document(search_result, "fetch_failed", str(exc))
@@ -111,7 +114,10 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
 
     if not crawl_request.crawl_websites:
         return Documents(
-            documents=[_search_result_to_document(search_result) for search_result in crawl_request.search_results.results]
+            documents=[
+                _search_result_to_document(search_result)
+                for search_result in crawl_request.search_results.results
+            ]
         )
 
     manager = ExtractorManager()
@@ -122,7 +128,10 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
             return await _crawl_search_result(search_result, crawl_request, manager)
 
     documents = await asyncio.gather(
-        *(guarded_crawl(search_result) for search_result in crawl_request.search_results.results),
+        *(
+            guarded_crawl(search_result)
+            for search_result in crawl_request.search_results.results
+        ),
         return_exceptions=False,
     )
 

@@ -13,5 +13,7 @@ class BaseExtractor(ABC):
     name: str
 
     @abstractmethod
-    async def extract(self, raw_document: RawDocument, html: str | None = None) -> ExtractionResult:
+    async def extract(
+        self, raw_document: RawDocument, html: str | None = None
+    ) -> ExtractionResult:
         """Extract structured content from the supplied HTML."""

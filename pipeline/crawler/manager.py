@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 class ExtractorManager:
     """Try deterministic extractors in order until the quality threshold is met."""
 
-    thresholds: ExtractionQualityThresholds = field(default_factory=ExtractionQualityThresholds)
+    thresholds: ExtractionQualityThresholds = field(
+        default_factory=ExtractionQualityThresholds
+    )
     extractors: list[BaseExtractor] = field(
         default_factory=lambda: [
             TrafilaturaExtractor(),
@@ -45,7 +47,9 @@ class ExtractorManager:
                 extra={"extractor": extractor.name, "url": raw_document.final_url},
             )
             extracted_document = await extractor.extract(raw_document, current_html)
-            quality = score_extraction(raw_document, extracted_document, self.thresholds)
+            quality = score_extraction(
+                raw_document, extracted_document, self.thresholds
+            )
             extracted_document.extraction_confidence = quality.score
 
             logger.info(

@@ -124,12 +124,17 @@ def score_extraction(
 
     score = (
         (1.0 if title_present else 0.0) * thresholds.weight_title
-        + _bounded_quality(character_count, thresholds.character_target) * thresholds.weight_characters
+        + _bounded_quality(character_count, thresholds.character_target)
+        * thresholds.weight_characters
         + _bounded_quality(word_count, thresholds.word_target) * thresholds.weight_words
-        + _bounded_quality(paragraph_count, thresholds.paragraph_target) * thresholds.weight_paragraphs
-        + _bounded_quality(content_html_ratio, thresholds.content_html_ratio_target) * thresholds.weight_content_ratio
-        + (1.0 - _bounded_quality(link_density, thresholds.link_density_target)) * thresholds.weight_link_density
-        + (1.0 - _bounded_quality(navigation_ratio, thresholds.navigation_ratio_target)) * thresholds.weight_navigation_ratio
+        + _bounded_quality(paragraph_count, thresholds.paragraph_target)
+        * thresholds.weight_paragraphs
+        + _bounded_quality(content_html_ratio, thresholds.content_html_ratio_target)
+        * thresholds.weight_content_ratio
+        + (1.0 - _bounded_quality(link_density, thresholds.link_density_target))
+        * thresholds.weight_link_density
+        + (1.0 - _bounded_quality(navigation_ratio, thresholds.navigation_ratio_target))
+        * thresholds.weight_navigation_ratio
     )
 
     accepted = (

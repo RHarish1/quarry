@@ -33,20 +33,25 @@ def _fallback_title(url: str) -> str:
     return parsed.netloc or url
 
 
-async def _extract_with_trafilatura(html: str, url: str) -> tuple[str, str, dict[str, str]]:
+async def _extract_with_trafilatura(
+    html: str, url: str
+) -> tuple[str, str, dict[str, str]]:
     def _run() -> tuple[str, str, dict[str, str]]:
-        markdown = trafilatura_extract(
-            html,
-            url=url,
-            output_format="markdown",
-            include_links=True,
-            include_tables=True,
-            include_formatting=True,
-            include_comments=False,
-            deduplicate=True,
-            favor_precision=True,
-            no_fallback=False,
-        ) or ""
+        markdown = (
+            trafilatura_extract(
+                html,
+                url=url,
+                output_format="markdown",
+                include_links=True,
+                include_tables=True,
+                include_formatting=True,
+                include_comments=False,
+                deduplicate=True,
+                favor_precision=True,
+                no_fallback=False,
+            )
+            or ""
+        )
 
         metadata = extract_metadata(html, default_url=url)
         title = getattr(metadata, "title", None) or _fallback_title(url)
@@ -56,7 +61,11 @@ async def _extract_with_trafilatura(html: str, url: str) -> tuple[str, str, dict
             "url": getattr(metadata, "url", None) or url,
         }
 
-        return title, markdown, {key: value for key, value in extra_metadata.items() if value}
+        return (
+            title,
+            markdown,
+            {key: value for key, value in extra_metadata.items() if value},
+        )
 
     return await asyncio.to_thread(_run)
 
@@ -66,10 +75,14 @@ class TrafilaturaExtractor(BaseExtractor):
 
     name = "trafilatura"
 
-    async def extract(self, raw_document: RawDocument, html: str | None = None) -> ExtractionResult:
+    async def extract(
+        self, raw_document: RawDocument, html: str | None = None
+    ) -> ExtractionResult:
         started = perf_counter()
         source_html = html or raw_document.raw_html
-        title, markdown, metadata = await _extract_with_trafilatura(source_html, raw_document.final_url)
+        title, markdown, metadata = await _extract_with_trafilatura(
+            source_html, raw_document.final_url
+        )
         plain_text = _markdown_to_plain_text(markdown)
         duration_ms = (perf_counter() - started) * 1000.0
 

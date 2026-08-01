@@ -16,7 +16,9 @@ from pipeline.crawler.extractors.trafilatura import (
 from pipeline.crawler.types import ExtractionResult, RawDocument
 
 
-async def _extract_with_readability(html: str, url: str) -> tuple[str, str, dict[str, str], str]:
+async def _extract_with_readability(
+    html: str, url: str
+) -> tuple[str, str, dict[str, str], str]:
     def _run() -> tuple[str, str, dict[str, str], str]:
         document = ReadabilityDocument(html)
         summary_html = document.summary(html_partial=True) or html
@@ -39,10 +41,14 @@ class ReadabilityExtractor(BaseExtractor):
 
     name = "readability"
 
-    async def extract(self, raw_document: RawDocument, html: str | None = None) -> ExtractionResult:
+    async def extract(
+        self, raw_document: RawDocument, html: str | None = None
+    ) -> ExtractionResult:
         started = perf_counter()
         source_html = html or raw_document.raw_html
-        title, markdown, metadata, summary_html = await _extract_with_readability(source_html, raw_document.final_url)
+        title, markdown, metadata, summary_html = await _extract_with_readability(
+            source_html, raw_document.final_url
+        )
         plain_text = _markdown_to_plain_text(markdown)
         duration_ms = (perf_counter() - started) * 1000.0
 

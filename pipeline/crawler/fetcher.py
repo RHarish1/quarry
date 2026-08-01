@@ -26,13 +26,17 @@ async def fetch_raw_document(
     ) as client:
         response = await client.get(
             search_result.url,
-            headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+            headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
         )
 
     fetch_duration_ms = (perf_counter() - started) * 1000.0
     raw_html = response.text
     response_headers = {key.lower(): value for key, value in response.headers.items()}
-    content_type = response_headers.get("content-type", "text/html").split(";", 1)[0].strip()
+    content_type = (
+        response_headers.get("content-type", "text/html").split(";", 1)[0].strip()
+    )
 
     return RawDocument(
         original_url=search_result.url,

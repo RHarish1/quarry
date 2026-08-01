@@ -40,7 +40,9 @@ class ExtractedDocument:
     extracted_markdown_size: int = 0
     source_html: str | None = None
 
-    def to_document(self, raw_document: RawDocument, *, crawl_status: str | None = None) -> Document:
+    def to_document(
+        self, raw_document: RawDocument, *, crawl_status: str | None = None
+    ) -> Document:
         """Convert an internal extracted document into the downstream raw document model."""
 
         safe_metadata: dict[str, Any] = {
@@ -58,7 +60,12 @@ class ExtractedDocument:
         if self.metadata:
             safe_metadata.update(self.metadata)
 
-        document_id = str(uuid5(NAMESPACE_URL, f"{raw_document.original_url}|{raw_document.final_url}|{self.title}"))
+        document_id = str(
+            uuid5(
+                NAMESPACE_URL,
+                f"{raw_document.original_url}|{raw_document.final_url}|{self.title}",
+            )
+        )
 
         return Document(
             id=document_id,
@@ -69,7 +76,8 @@ class ExtractedDocument:
             html=None,
             metadata=safe_metadata,
             crawl_timestamp=raw_document.fetch_timestamp,
-            crawl_latency_ms=raw_document.fetch_duration_ms + self.extraction_duration_ms,
+            crawl_latency_ms=raw_document.fetch_duration_ms
+            + self.extraction_duration_ms,
             crawl_status=crawl_status or self.extraction_method or "success",
             content_type=raw_document.content_type,
         )
