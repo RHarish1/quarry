@@ -22,10 +22,11 @@ Final normalized query
 """
 
 from __future__ import annotations
-from models.search import SearchRequest
+
 import re
 import unicodedata
 
+from models.search import SearchRequest
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[^\w\s\-\"']")
@@ -39,12 +40,7 @@ def _normalize_unicode(text: str) -> str:
 
 def _normalize_quotes(text: str) -> str:
     """Convert smart quotes to standard quotes."""
-    return (
-        text.replace("“", '"')
-        .replace("”", '"')
-        .replace("‘", "'")
-        .replace("’", "'")
-    )
+    return text.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
 
 
 def _normalize_whitespace(text: str) -> str:

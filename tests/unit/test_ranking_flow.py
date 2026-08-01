@@ -122,9 +122,7 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
     monkeypatch.setattr(pipeline_module, "search_searxng", fake_search_searxng)
     monkeypatch.setattr(pipeline_module, "rank_documents", fake_rank_documents)
     monkeypatch.setattr(pipeline_module, "clean_documents", fake_clean_documents)
-    monkeypatch.setattr(
-        pipeline_module, "compress_documents", fake_compress_documents
-    )
+    monkeypatch.setattr(pipeline_module, "compress_documents", fake_compress_documents)
 
     request = SearchRequest(
         query="quarry",

@@ -68,28 +68,19 @@ def _compress_document(
                 original_tokens - compressed_tokens,
             ),
             "reduction_percentage": (
-                (
-                    max(0, original_tokens - compressed_tokens)
-                    / original_tokens
-                )
-                * 100
+                (max(0, original_tokens - compressed_tokens) / original_tokens) * 100
                 if original_tokens
                 else 0.0
             ),
             "cleaning_steps_applied": (
-                document.cleaning_steps_applied
-                + ["deterministic_compression"]
+                document.cleaning_steps_applied + ["deterministic_compression"]
             ),
         }
     )
 
 
 def _split_paragraphs(text: str) -> list[str]:
-    return [
-        paragraph.strip()
-        for paragraph in text.split("\n\n")
-        if paragraph.strip()
-    ]
+    return [paragraph.strip() for paragraph in text.split("\n\n") if paragraph.strip()]
 
 
 def _remove_duplicate_paragraphs(

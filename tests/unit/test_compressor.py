@@ -41,7 +41,10 @@ def test_compression_uses_requested_budget_and_records_the_step() -> None:
 
     compressed = documents.documents[0]
     assert latency_ms >= 0.0
-    assert compressed.cleaned_markdown == "First paragraph contains enough detail to be retained."
+    assert (
+        compressed.cleaned_markdown
+        == "First paragraph contains enough detail to be retained."
+    )
     assert compressed.cleaned_token_count <= 13
     assert compressed.tokens_removed > 0
     assert compressed.cleaning_steps_applied[-1] == "deterministic_compression"
@@ -49,7 +52,9 @@ def test_compression_uses_requested_budget_and_records_the_step() -> None:
 
 def test_compression_uses_the_default_budget_when_none_is_supplied() -> None:
     documents, latency_ms = compress_documents(
-        CleanDocuments(documents=[_document("A sufficiently long paragraph for compression.")])
+        CleanDocuments(
+            documents=[_document("A sufficiently long paragraph for compression.")]
+        )
     )
 
     assert latency_ms >= 0.0
