@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from retrieval.robots import can_crawl
+from pipeline.retrieval.robots import can_crawl
 
 from models.document import Documents
 from models.search import CrawlRequest, SearchResults
