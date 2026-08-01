@@ -1,7 +1,10 @@
 # Crawling Stage
 
 The crawling stage converts `SearchResult` objects into raw `Document` objects.
-Its implementation is in `pipeline/crawler/crawler.py`.
+Its public entrypoint is `pipeline/crawler/crawler.py`, while the internal
+implementation is split across `pipeline/crawler/fetcher.py`,
+`pipeline/crawler/manager.py`, `pipeline/crawler/quality.py`, and
+`pipeline/crawler/extractors/`.
 
 ## Disabled Crawling
 
@@ -9,28 +12,29 @@ Its implementation is in `pipeline/crawler/crawler.py`.
 search result's snippet becomes `Document.markdown`, `crawl_status` is
 `skipped`, and the document metadata records `source: search_provider`.
 
-## Fetching Pages
+## Fetch and Extract
 
-When `crawl_websites` is true, Quarry fetches each result URL with HTTPX. It
-follows redirects, uses the `Quarry/1.0` user agent, and limits simultaneous
-fetches with `CRAWL_MAX_CONCURRENCY` (default: 4). Each fetch has the
-`CRAWL_TIMEOUT_SECONDS` timeout (default: 30 seconds).
+When `crawl_websites` is true, Quarry runs a deterministic fetch/extract
+pipeline:
 
-For successful responses, the stage:
+1. HTTPX fetches the raw HTML and stores it in an internal `RawDocument`.
+2. Trafilatura extracts article content directly from the raw HTML.
+3. If the quality score is still low, Playwright renders the page and runs
+   Trafilatura again.
+4. If the page still does not meet the quality threshold, readability-lxml
+   converts the article into Markdown as the final fallback.
 
-1. Removes noisy HTML elements such as scripts, styles, SVGs, iframes, and forms.
-2. Converts the page body, `main`, or `article` content to ATX-style Markdown.
-3. Normalizes the Markdown and falls back to the search snippet if it is empty.
-4. Extracts the page title, canonical URL, final redirected URL, content type,
-   timestamp, and elapsed crawl time.
+The extractor manager evaluates each result with deterministic thresholds for
+text length, word count, paragraph count, content-to-HTML ratio, link density,
+and navigation ratio. The raw HTML is retained only internally. The downstream
+`Document` keeps `html=None` so the API never returns page markup.
 
-The original HTML is retained in `Document.html`; the fetched content is marked
-with `source: fetched_html` in metadata.
+The public `Document` preserves the final URL, HTTP status, content type,
+timing information, and safe metadata needed by the cleaning stage.
 
 ## Failure Handling
 
-A timeout, HTTP client error, unexpected crawler failure, or HTTP status of 400
-or higher produces a fallback document rather than dropping the search result.
-Fallbacks preserve the search URL, title, and snippet, set a status of
-`timeout`, `crawl_failed`, or `http_error`, and record a
-`crawl_fallback_reason` in metadata.
+A timeout, HTTP client error, render failure, or extraction failure produces a
+fallback document rather than dropping the search result. Fallbacks preserve
+the search URL, title, and snippet, set a status of `fetch_failed` or
+`extract_failed`, and record a `crawl_fallback_reason` in metadata.

@@ -13,7 +13,7 @@ flowchart LR
   Client[Client] --> API[FastAPI API]
   API --> Pipeline[Retrieval Pipeline]
    Pipeline --> Search[SearXNG Search]
-   Pipeline --> Crawler[Crawl4AI Crawler]
+  Pipeline --> Crawler[Fetch + Extract Manager]
    Pipeline --> Cleaner[Deterministic Cleaner]
    Search --> URLs[Candidate URLs]
    Crawler --> Document[Document]
