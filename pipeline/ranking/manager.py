@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from retrieval.robots import can_crawl
+
 from models.document import Documents
 from models.search import CrawlRequest, SearchResults
 from pipeline.crawler.crawler import crawl_documents
@@ -36,8 +38,8 @@ async def rank_documents(
             ↓
         Return top documents
     """
-
-    candidates = filter_candidates(search_results.results)
+    allowed_websites = await can_crawl(search_results.results)
+    candidates = filter_candidates(allowed_websites.results)
 
     accepted_documents = []
     current_index = 0
