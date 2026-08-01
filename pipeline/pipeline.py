@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     """Run the search, crawl, and cleaning pipeline."""
     key = make_cache_key(request)
-    logger.info("Original Query", request.query)
-    request = normalize_query(request)
+    if request.enhance_query:
+        logger.info("Original Query", request.query)
+        request = normalize_query(request)
 
     if request.enable_caching:
         logger.info("Cache Check")
