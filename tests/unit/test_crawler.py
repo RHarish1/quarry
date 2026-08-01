@@ -4,13 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-<<<<<<< HEAD
-from typing import Self
-
-import httpx
-=======
 from datetime import datetime, timezone
->>>>>>> origin/main
 
 from models.search import CrawlRequest, SearchResult, SearchResults
 from pipeline.crawler import crawler as crawler_module
@@ -73,11 +67,6 @@ def _article_raw_document() -> RawDocument:
         content_type="text/html",
     )
 
-<<<<<<< HEAD
-    async def __aenter__(self) -> Self:
-        return self
-=======
->>>>>>> origin/main
 
 def test_quality_accepts_article_like_content() -> None:
     raw_document = _article_raw_document()
@@ -175,7 +164,6 @@ def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
     crawl_request = CrawlRequest(
         search_results=SearchResults(
             results=[
-<<<<<<< HEAD
                 SearchResult(
                     url="https://example.com/good",
                     title="Good",
@@ -188,9 +176,6 @@ def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
                     content="Snippet",
                     metadata={"engine": "google"},
                 ),
-=======
-                SearchResult(url="https://example.com/article", title="Article Title", content="Snippet", metadata={"engine": "google"}),
->>>>>>> origin/main
             ]
         ),
         crawl_websites=True,
@@ -203,69 +188,8 @@ def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
 
     assert len(documents.documents) == 1
     document = documents.documents[0]
-<<<<<<< HEAD
-    assert document.title == "Meta Title"
-    assert document.canonical_url == "https://example.com/canonical"
-    assert document.content_type == "text/html"
-    assert document.metadata["engine"] == "google"
-    assert document.markdown == "# Title\n\nBody"
-    assert FakeAsyncClient.last_requested_url == "https://example.com/missing"
-    assert documents.documents[1].crawl_status == "http_error"
-
-
-def test_crawler_times_out_gracefully(monkeypatch) -> None:
-    monkeypatch.setattr(crawler_module.httpx, "AsyncClient", FakeAsyncClient)
-
-    crawl_request = CrawlRequest(
-        search_results=SearchResults(
-            results=[
-                SearchResult(
-                    url="https://example.com/slow",
-                    title="Slow",
-                    content="Snippet",
-                    metadata={},
-                ),
-            ]
-        ),
-        crawl_websites=True,
-        enable_caching=False,
-        timeout_seconds=0.01,
-        max_concurrency=1,
-    )
-
-    documents = asyncio.run(crawler_module.crawl_documents(crawl_request))
-    assert len(documents.documents) == 1
-    assert documents.documents[0].crawl_status == "timeout"
-
-
-def test_crawler_passthrough_when_disabled(monkeypatch) -> None:
-    monkeypatch.setattr(crawler_module.httpx, "AsyncClient", FakeAsyncClient)
-
-    crawl_request = CrawlRequest(
-        search_results=SearchResults(
-            results=[
-                SearchResult(
-                    url="https://example.com/good",
-                    title="Good",
-                    content="Snippet",
-                    metadata={"engine": "google"},
-                ),
-            ]
-        ),
-        crawl_websites=False,
-        enable_caching=False,
-        timeout_seconds=1.0,
-        max_concurrency=1,
-    )
-
-    documents = asyncio.run(crawler_module.crawl_documents(crawl_request))
-    assert len(documents.documents) == 1
-    assert documents.documents[0].crawl_status == "skipped"
-    assert documents.documents[0].markdown == "Snippet"
-=======
     assert document.html is None
     assert document.title == "Article Title"
     assert document.markdown.startswith("# Article Title")
     assert document.metadata["extraction_method"] == "fake"
     assert document.crawl_status == "fake"
->>>>>>> origin/main
