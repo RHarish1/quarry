@@ -86,7 +86,7 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
                 "cleaning_level": 1,
                 "crawl_websites": True,
                 "enable_caching": False,
-                "compress_output_using_headroom": False,
+                "compress_output": False,
                 "enhance_query": False,
                 "rank_and_score_deterministically": False,
                 "time_range": "day",
@@ -105,4 +105,5 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
     assert payload["documents"][0]["url"] == "https://example.com/article"
     assert payload["documents"][0]["cleaned_markdown"] == "# Example\n\nBody"
     assert "timings" in payload
+    assert payload["timings"]["compression_latency_ms"] == 0.0
     assert payload["timings"]["total_request_latency_ms"] >= 0

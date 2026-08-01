@@ -15,11 +15,14 @@ flowchart LR
   Limit --> Pipeline[Search pipeline]
   Pipeline --> Cache{Caching enabled?}
   Cache -->|Hit| Response[SearchResponse]
-  Cache -->|Miss| Search[SearXNG]
-  Search --> Crawl[Fetch and extract]
+  Cache -->|Miss| Normalize[Optional query normalization]
+  Normalize --> Search[SearXNG]
+  Search --> Crawl[Fetch, extract, and optionally rank]
   Crawl --> Clean[Deterministic cleaning]
+  Clean --> Compress[Optional deterministic compression]
   Clean --> Cache
-  Clean --> Response
+  Compress --> Cache
+  Compress --> Response
 ```
 
 ## Quick Start
@@ -82,6 +85,9 @@ It is therefore not a Quarry configuration variable.
 
 Each document is a `CleanDocument` that preserves the raw document fields and adds deterministic cleaning metrics.
 
+`SearchResponse.timings` reports search, crawl, cleaning, optional compression,
+and total pipeline latency in milliseconds.
+
 ## Development Setup
 
 - Python 3.12+
@@ -115,6 +121,7 @@ The processing pipeline is documented stage by stage:
 - [Retrieval](docs/retrieval.md): SearXNG request construction and result normalization.
 - [Crawling](docs/crawling.md): page fetching, HTML-to-Markdown conversion, and fallbacks.
 - [Cleaning](docs/cleaning.md): deterministic Markdown transformations and metrics.
+- [Compression](docs/compression.md): optional token-budgeted output reduction.
 - [Caching](docs/caching.md): Redis lifecycle, key construction, and expiration.
 
 ## Project Layout

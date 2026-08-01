@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from models.clean_document import CleanDocument
 from pipeline.ranking.constants import DEFAULT_TARGET_DOCUMENTS
 
+
 class CleaningLevel(IntEnum):
     """Cleaning intensity levels."""
 
@@ -51,7 +52,7 @@ class SearchRequest(BaseModel):
     cleaning_level: CleaningLevel = CleaningLevel.LEVEL_0
     crawl_websites: bool = False
     enable_caching: bool = False
-    compress_output_using_headroom: bool = False
+    compress_output: bool = False
     target_documents: int = DEFAULT_TARGET_DOCUMENTS
     enhance_query: bool = False
     rank_and_score_deterministically: bool = False
@@ -60,6 +61,7 @@ class SearchRequest(BaseModel):
     engines: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
     format: SearchFormat = SearchFormat.JSON
+    target_token_budget: int | None = Field(default=None, ge=1)
 
 
 class SearchResult(BaseModel):
@@ -93,6 +95,7 @@ class SearchTimings(BaseModel):
     search_latency_ms: float
     crawl_latency_ms: float
     cleaning_latency_ms: float
+    compression_latency_ms: float = 0.0
     total_request_latency_ms: float
 
 

@@ -9,10 +9,12 @@ from config.settings import settings
 from models.clean_document import CleanRequest
 from models.search import CrawlRequest, SearchRequest, SearchResponse, SearchTimings
 from pipeline.cleaning.cleaner import clean_documents
+from pipeline.compression.compressor import compress_documents
 from pipeline.crawler.crawler import crawl_documents
+from pipeline.query.normalizer import normalize_query
 from pipeline.ranking.manager import rank_documents
 from pipeline.retrieval.searxng import search_searxng
-from pipeline.query.normalizer import normalize_query
+
 from .cache import get, make_cache_key, set
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     """Run the search, crawl, and cleaning pipeline."""
     key = make_cache_key(request)
     if request.enhance_query:
-        logger.info("Original Query", request.query)
+        logger.info("Original query: %s", request.query)
         request = normalize_query(request)
 
     if request.enable_caching:
@@ -59,6 +61,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
                 search_latency_ms=search_latency_ms,
                 crawl_latency_ms=0.0,
                 cleaning_latency_ms=0.0,
+                compression_latency_ms=0.0,
                 total_request_latency_ms=total_request_latency_ms,
             ),
             documents=[],
@@ -101,6 +104,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
                 search_latency_ms=search_latency_ms,
                 crawl_latency_ms=crawl_latency_ms,
                 cleaning_latency_ms=0.0,
+                compression_latency_ms=0.0,
                 total_request_latency_ms=total_request_latency_ms,
             ),
             documents=[],
@@ -132,6 +136,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
                 search_latency_ms=search_latency_ms,
                 crawl_latency_ms=crawl_latency_ms,
                 cleaning_latency_ms=cleaning_latency_ms,
+                compression_latency_ms=0.0,
                 total_request_latency_ms=total_request_latency_ms,
             ),
             documents=[],
@@ -142,6 +147,21 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
         cleaning_latency_ms,
     )
 
+    compression_latency_ms = 0.0
+    if request.compress_output:
+        compression_started = perf_counter()
+        try:
+            compressed_documents, compression_latency_ms = compress_documents(
+                cleaned_documents,
+                token_budget=request.target_token_budget,
+            )
+        except Exception:
+            logger.exception("Compression stage failed")
+            compressed_documents = cleaned_documents
+            compression_latency_ms = (perf_counter() - compression_started) * 1000.0
+    else:
+        compressed_documents = cleaned_documents
+
     total_request_latency_ms = (perf_counter() - total_started) * 1000.0
     response = SearchResponse(
         query=request.query,
@@ -149,10 +169,13 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
             search_latency_ms=search_latency_ms,
             crawl_latency_ms=crawl_latency_ms,
             cleaning_latency_ms=cleaning_latency_ms,
+            compression_latency_ms=compression_latency_ms,
             total_request_latency_ms=total_request_latency_ms,
         ),
-        documents=cleaned_documents.documents,
+        documents=compressed_documents.documents,
     )
+
     if request.enable_caching and response.documents:
         await set(key, response)
+
     return response

@@ -115,15 +115,24 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
             ]
         )
 
+    def fake_compress_documents(documents, *, token_budget):
+        assert token_budget == 128
+        return documents, 12.5
+
     monkeypatch.setattr(pipeline_module, "search_searxng", fake_search_searxng)
     monkeypatch.setattr(pipeline_module, "rank_documents", fake_rank_documents)
     monkeypatch.setattr(pipeline_module, "clean_documents", fake_clean_documents)
+    monkeypatch.setattr(
+        pipeline_module, "compress_documents", fake_compress_documents
+    )
 
     request = SearchRequest(
         query="quarry",
         cleaning_level=CleaningLevel.LEVEL_1,
         crawl_websites=True,
         rank_and_score_deterministically=True,
+        compress_output=True,
+        target_token_budget=128,
         format=SearchFormat.JSON,
     )
 
@@ -132,3 +141,26 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
     assert response.query == "quarry"
     assert len(response.documents) == 1
     assert response.documents[0].url == "https://example.com/article"
+    assert response.timings.compression_latency_ms == 12.5
+    assert response.timings.total_request_latency_ms >= 0.0
+
+
+def test_pipeline_sets_compression_latency_to_zero_when_search_fails(
+    monkeypatch,
+) -> None:
+    async def failing_search_searxng(request: SearchRequest) -> SearchResults:
+        raise RuntimeError("SearXNG unavailable")
+
+    monkeypatch.setattr(pipeline_module, "search_searxng", failing_search_searxng)
+
+    response = asyncio.run(
+        pipeline_module.execute_search_pipeline(
+            SearchRequest(query="quarry", compress_output=True)
+        )
+    )
+
+    assert response.documents == []
+    assert response.timings.search_latency_ms >= 0.0
+    assert response.timings.crawl_latency_ms == 0.0
+    assert response.timings.cleaning_latency_ms == 0.0
+    assert response.timings.compression_latency_ms == 0.0

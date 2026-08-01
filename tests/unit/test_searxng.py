@@ -55,7 +55,7 @@ def test_search_searxng_maps_response_and_parameters(monkeypatch) -> None:
         cleaning_level=CleaningLevel.LEVEL_2,
         crawl_websites=True,
         enable_caching=False,
-        compress_output_using_headroom=False,
+        compress_output=False,
         enhance_query=False,
         rank_and_score_deterministically=False,
         time_range="day",

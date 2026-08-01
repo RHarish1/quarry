@@ -145,6 +145,8 @@ def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
     raw_document = _article_raw_document()
 
     async def fake_fetch_raw_document(search_result, timeout_seconds):
+        if search_result.url.endswith("/missing"):
+            raise RuntimeError("fetch failed")
         return raw_document
 
     class FakeManager:
@@ -190,10 +192,13 @@ def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
 
     documents = asyncio.run(crawler_module.crawl_documents(crawl_request))
 
-    assert len(documents.documents) == 1
+    assert len(documents.documents) == 2
     document = documents.documents[0]
     assert document.html is None
     assert document.title == "Article Title"
     assert document.markdown.startswith("# Article Title")
     assert document.metadata["extraction_method"] == "fake"
     assert document.crawl_status == "fake"
+    fallback_document = documents.documents[1]
+    assert fallback_document.html is None
+    assert fallback_document.crawl_status == "fetch_failed"
