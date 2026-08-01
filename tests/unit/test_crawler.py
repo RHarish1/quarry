@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import Self
 
 import httpx
 
@@ -34,7 +35,7 @@ class FakeAsyncClient:
         self.args = args
         self.kwargs = kwargs
 
-    async def __aenter__(self) -> "FakeAsyncClient":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -74,8 +75,18 @@ def test_crawler_skips_failures_and_preserves_metadata(monkeypatch) -> None:
     crawl_request = CrawlRequest(
         search_results=SearchResults(
             results=[
-                SearchResult(url="https://example.com/good", title="Good", content="Snippet", metadata={"engine": "google"}),
-                SearchResult(url="https://example.com/missing", title="Missing", content="Snippet", metadata={"engine": "google"}),
+                SearchResult(
+                    url="https://example.com/good",
+                    title="Good",
+                    content="Snippet",
+                    metadata={"engine": "google"},
+                ),
+                SearchResult(
+                    url="https://example.com/missing",
+                    title="Missing",
+                    content="Snippet",
+                    metadata={"engine": "google"},
+                ),
             ]
         ),
         crawl_websites=True,
@@ -102,7 +113,12 @@ def test_crawler_times_out_gracefully(monkeypatch) -> None:
     crawl_request = CrawlRequest(
         search_results=SearchResults(
             results=[
-                SearchResult(url="https://example.com/slow", title="Slow", content="Snippet", metadata={}),
+                SearchResult(
+                    url="https://example.com/slow",
+                    title="Slow",
+                    content="Snippet",
+                    metadata={},
+                ),
             ]
         ),
         crawl_websites=True,
@@ -122,7 +138,12 @@ def test_crawler_passthrough_when_disabled(monkeypatch) -> None:
     crawl_request = CrawlRequest(
         search_results=SearchResults(
             results=[
-                SearchResult(url="https://example.com/good", title="Good", content="Snippet", metadata={"engine": "google"}),
+                SearchResult(
+                    url="https://example.com/good",
+                    title="Good",
+                    content="Snippet",
+                    metadata={"engine": "google"},
+                ),
             ]
         ),
         crawl_websites=False,

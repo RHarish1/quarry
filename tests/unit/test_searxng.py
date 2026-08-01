@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Self
 
 from models.search import CleaningLevel, SearchFormat, SearchRequest
 from pipeline.retrieval import searxng as searxng_module
@@ -24,7 +25,7 @@ class FakeAsyncClient:
         self.base_url = kwargs.get("base_url")
         self.timeout = kwargs.get("timeout")
 
-    async def __aenter__(self) -> "FakeAsyncClient":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:

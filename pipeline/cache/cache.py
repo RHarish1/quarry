@@ -1,6 +1,6 @@
-from .redis import get_redis
 from models.search import SearchResponse
 
+from .redis import get_redis
 
 DEFAULT_TTL_SECONDS = 3600
 

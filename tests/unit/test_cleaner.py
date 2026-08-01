@@ -1,6 +1,6 @@
 """Deterministic cleaner tests for Quarry."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from models.clean_document import CleanRequest
 from models.document import Document, Documents
@@ -26,7 +26,7 @@ def test_cleaner_removes_duplicates_and_boilerplate() -> None:
         ),
         html="<html></html>",
         metadata={"source": "fixture"},
-        crawl_timestamp=datetime.now(timezone.utc),
+        crawl_timestamp=datetime.now(UTC),
         crawl_latency_ms=12.5,
         crawl_status="success",
         content_type="text/html",

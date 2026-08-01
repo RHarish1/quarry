@@ -1,15 +1,16 @@
 """FastAPI application for Quarry."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from api.middleware import DEFAULT_RATE_LIMIT
+from fastapi_limiter import FastAPILimiter
+
 from api.routes.search import router as search_router
 from config.logging import configure_logging
-from contextlib import asynccontextmanager
 from pipeline.cache import close_redis, get_redis
-from fastapi_limiter import FastAPILimiter
-from redis.asyncio import Redis
 
 configure_logging()
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -17,6 +18,7 @@ async def lifespan(app):
     await FastAPILimiter.init(redis)
     yield
     await close_redis()
+
 
 app = FastAPI(title="Quarry", lifespan=lifespan)
 

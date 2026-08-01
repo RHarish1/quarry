@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
-from uuid import uuid4
 from urllib.parse import urljoin
-from markdownify import markdownify as md
-from bs4 import BeautifulSoup, Tag
-import httpx
-from bs4.element import NavigableString
+from uuid import uuid4
 
-from config.settings import settings
+import httpx
+from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
+from markdownify import markdownify as md
+
 from models.document import Document, Documents
 from models.search import CrawlRequest, SearchResult
 from pipeline.cleaning.steps import normalize_markdown
@@ -23,16 +23,19 @@ NOISY_TAGS = {"script", "style", "noscript", "svg", "iframe", "form"}
 CONTAINER_TAGS = {"body", "main", "article", "section", "div", "header", "aside"}
 HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 
+
 def _load_http_client() -> type[httpx.AsyncClient]:
     """Return the HTTP client used for fetching pages."""
 
     return httpx.AsyncClient
 
 
-def _fallback_document(search_result: SearchResult, status: str, reason: str) -> Document:
+def _fallback_document(
+    search_result: SearchResult, status: str, reason: str
+) -> Document:
     """Create a conservative document fallback when crawling cannot proceed."""
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     metadata: dict[str, Any] = {}
     if isinstance(search_result.metadata, dict):
         metadata.update(search_result.metadata)
@@ -138,7 +141,6 @@ def _render_markdown_blocks(element: Tag) -> list[str]:
     return blocks
 
 
-
 def _html_to_markdown(html: str) -> str:
     soup = BeautifulSoup(html, "lxml")
 
@@ -147,15 +149,11 @@ def _html_to_markdown(html: str) -> str:
 
     # remove comments
     from bs4 import Comment
+
     for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
         comment.extract()
 
-    root = (
-        soup.find("main")
-        or soup.find("article")
-        or soup.body
-        or soup
-    )
+    root = soup.find("main") or soup.find("article") or soup.body or soup
 
     markdown = md(
         str(root),
@@ -192,7 +190,9 @@ def _extract_canonical_url_from_html(html: str, fallback_url: str) -> str:
     """Preserve the canonical URL when available."""
 
     soup = BeautifulSoup(html, "html.parser")
-    canonical_tag = soup.find("link", attrs={"rel": lambda value: value and "canonical" in value})
+    canonical_tag = soup.find(
+        "link", attrs={"rel": lambda value: value and "canonical" in value}
+    )
     if canonical_tag and isinstance(canonical_tag.get("href"), str):
         canonical_url = canonical_tag.get("href", "").strip()
         if canonical_url:
@@ -204,7 +204,9 @@ def _extract_canonical_url_from_html(html: str, fallback_url: str) -> str:
 def _extract_content_type(response: httpx.Response) -> str:
     """Preserve the response content type when available."""
 
-    content_type = response.headers.get("content-type") or response.headers.get("Content-Type")
+    content_type = response.headers.get("content-type") or response.headers.get(
+        "Content-Type"
+    )
     if isinstance(content_type, str) and content_type.strip():
         return content_type.split(";", 1)[0].strip()
 
@@ -214,7 +216,7 @@ def _extract_content_type(response: httpx.Response) -> str:
 def _result_to_document(search_result: SearchResult) -> Document:
     """Convert a search hit directly into a raw document when crawling is disabled."""
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Document(
         id=uuid4().hex,
         url=search_result.url,
@@ -230,13 +232,17 @@ def _result_to_document(search_result: SearchResult) -> Document:
     )
 
 
-async def _crawl_search_result(search_result: SearchResult, crawl_request: CrawlRequest) -> Document | None:
+async def _crawl_search_result(
+    search_result: SearchResult, crawl_request: CrawlRequest
+) -> Document | None:
     """Crawl a single search hit into a raw document."""
 
     crawl_started = perf_counter()
     try:
         http_client = _load_http_client()
-        async with http_client(follow_redirects=True, timeout=crawl_request.timeout_seconds) as client:
+        async with http_client(
+            follow_redirects=True, timeout=crawl_request.timeout_seconds
+        ) as client:
             response = await asyncio.wait_for(
                 client.get(
                     search_result.url,
@@ -247,16 +253,20 @@ async def _crawl_search_result(search_result: SearchResult, crawl_request: Crawl
                 ),
                 timeout=crawl_request.timeout_seconds,
             )
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         return _fallback_document(search_result, "timeout", "crawl timed out")
     except httpx.HTTPError:
         return _fallback_document(search_result, "crawl_failed", "http fetch failed")
-    except Exception:
-        return _fallback_document(search_result, "crawl_failed", "crawl execution failed")
+    except Exception:  # noqa: BLE001
+        return _fallback_document(
+            search_result, "crawl_failed", "crawl execution failed"
+        )
 
     crawl_latency_ms = (perf_counter() - crawl_started) * 1000.0
     if response.status_code >= 400:
-        return _fallback_document(search_result, "http_error", f"http {response.status_code}")
+        return _fallback_document(
+            search_result, "http_error", f"http {response.status_code}"
+        )
 
     html = response.text
     markdown = _html_to_markdown(html)
@@ -277,7 +287,7 @@ async def _crawl_search_result(search_result: SearchResult, crawl_request: Crawl
         markdown=markdown,
         html=html or None,
         metadata=document_metadata,
-        crawl_timestamp=datetime.now(timezone.utc),
+        crawl_timestamp=datetime.now(UTC),
         crawl_latency_ms=crawl_latency_ms,
         crawl_status="success",
         content_type=_extract_content_type(response),
@@ -292,7 +302,10 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
 
     if not crawl_request.crawl_websites:
         return Documents(
-            documents=[_result_to_document(search_result) for search_result in crawl_request.search_results.results]
+            documents=[
+                _result_to_document(search_result)
+                for search_result in crawl_request.search_results.results
+            ]
         )
 
     semaphore = asyncio.Semaphore(max(1, crawl_request.max_concurrency))
@@ -302,13 +315,12 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
             return await _crawl_search_result(search_result, crawl_request)
 
     results = await asyncio.gather(
-        *(guarded_crawl(search_result) for search_result in crawl_request.search_results.results),
+        *(
+            guarded_crawl(search_result)
+            for search_result in crawl_request.search_results.results
+        ),
         return_exceptions=False,
     )
 
-    documents = [
-        document
-        for document in results
-        if document is not None
-    ]
+    documents = [document for document in results if document is not None]
     return Documents(documents=documents)

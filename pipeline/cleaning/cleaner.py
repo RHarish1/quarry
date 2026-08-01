@@ -5,8 +5,6 @@ from __future__ import annotations
 from time import perf_counter
 
 from models.clean_document import CleanDocument, CleanDocuments, CleanRequest
-from utils.tokens import count_tokens
-
 from pipeline.cleaning.steps import (
     normalize_markdown,
     remove_advertisement_sections,
@@ -18,6 +16,7 @@ from pipeline.cleaning.steps import (
     remove_navigation_sections,
     remove_repeated_whitespace,
 )
+from utils.tokens import count_tokens
 
 
 def _apply_cleaning_steps(markdown: str, cleaning_level: int) -> tuple[str, list[str]]:
@@ -33,7 +32,9 @@ def _apply_cleaning_steps(markdown: str, cleaning_level: int) -> tuple[str, list
     if cleaning_level >= 1:
         cleaned = remove_cookie_banner_sections(cleaned)
         cleaned = remove_duplicate_paragraphs(cleaned)
-        steps_applied.extend(["remove_cookie_banner_sections", "remove_duplicate_paragraphs"])
+        steps_applied.extend(
+            ["remove_cookie_banner_sections", "remove_duplicate_paragraphs"]
+        )
 
     if cleaning_level >= 2:
         cleaned = remove_navigation_sections(cleaned)
@@ -71,7 +72,7 @@ def clean_documents(clean_request: CleanRequest) -> CleanDocuments:
                 document.markdown,
                 clean_request.cleaning_level,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             cleaned_markdown = document.markdown
             steps_applied = ["cleaning_failed"]
 
@@ -79,7 +80,9 @@ def clean_documents(clean_request: CleanRequest) -> CleanDocuments:
         cleaned_token_count = count_tokens(cleaned_markdown)
         tokens_removed = max(original_token_count - cleaned_token_count, 0)
         reduction_percentage = (
-            (tokens_removed / original_token_count) * 100.0 if original_token_count else 0.0
+            (tokens_removed / original_token_count) * 100.0
+            if original_token_count
+            else 0.0
         )
 
         cleaned_documents.append(
