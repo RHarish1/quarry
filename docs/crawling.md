@@ -29,8 +29,12 @@ text length, word count, paragraph count, content-to-HTML ratio, link density,
 and navigation ratio. The raw HTML is retained only internally. The downstream
 `Document` keeps `html=None` so the API never returns page markup.
 
-The public `Document` preserves the final URL, HTTP status, content type,
-timing information, and safe metadata needed by the cleaning stage.
+The public `Document` preserves the final URL, content type, timing
+information, and safe extraction metadata needed by the cleaning stage. Its
+`crawl_status` is the extractor method that produced the result
+(`trafilatura`, `playwright_trafilatura`, or `readability`). The raw response
+HTML and HTTP status are kept only in the internal `RawDocument`; API responses
+set `html` to `null`.
 
 ## Failure Handling
 

@@ -29,5 +29,5 @@ field produces an empty result list.
 
 Connection failures, timeouts, non-success upstream responses, and non-JSON
 payloads are represented as HTTP 502 errors inside the retrieval client. The
-top-level pipeline catches stage failures and returns an empty response instead
-of propagating them to the API caller.
+top-level pipeline catches that exception and returns an empty response with
+the measured search latency instead of propagating it to the API caller.

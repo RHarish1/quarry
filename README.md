@@ -11,14 +11,15 @@ Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves 
 ```mermaid
 flowchart LR
   Client[Client] --> API[FastAPI API]
-  API --> Pipeline[Retrieval Pipeline]
-   Pipeline --> Search[SearXNG Search]
-  Pipeline --> Crawler[Fetch + Extract Manager]
-   Pipeline --> Cleaner[Deterministic Cleaner]
-   Search --> URLs[Candidate URLs]
-   Crawler --> Document[Document]
-   Cleaner --> CleanDocument[CleanDocument]
-   API --> Response[SearchResponse]
+  API --> Limit[Redis-backed rate limit]
+  Limit --> Pipeline[Search pipeline]
+  Pipeline --> Cache{Caching enabled?}
+  Cache -->|Hit| Response[SearchResponse]
+  Cache -->|Miss| Search[SearXNG]
+  Search --> Crawl[Fetch and extract]
+  Crawl --> Clean[Deterministic cleaning]
+  Clean --> Cache
+  Clean --> Response
 ```
 
 ## Quick Start
@@ -67,8 +68,11 @@ to the command that starts the app.
 The defaults use Docker Compose service names. Override `SEARXNG_BASE_URL` and
 `REDIS_URL` when running the API outside that Compose network.
 
-Redis clients are created lazily when caching is used and are closed during API
-shutdown. Cached search responses expire after one hour.
+Redis is initialized during API startup for rate limiting and is also used for
+optional response caching. Cached search responses expire after one hour.
+
+`APP_ENV`, although set by `docker-compose.yml`, is not read by the application.
+It is therefore not a Quarry configuration variable.
 
 `POST /search` returns:
 
@@ -93,11 +97,18 @@ Each document is a `CleanDocument` that preserves the raw document fields and ad
 ## API
 
 - `POST /search` accepts a `SearchRequest` body, calls SearXNG over HTTP, crawls the returned URLs, cleans the markdown, and returns a normalized `SearchResponse`.
+- `GET /health` reports whether the API process is running.
 
 See [the Search API reference](docs/search-api.md) for request fields and an
 example.
 
-## Pipeline Documentation
+## Request Flow
+
+For the complete lifecycle of a request—including rate limiting, caching,
+retrieval, extraction fallbacks, cleaning, and failure behavior—see the
+[request-flow guide](docs/request-flow.md).
+
+## Stage Documentation
 
 The processing pipeline is documented stage by stage:
 

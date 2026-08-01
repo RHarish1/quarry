@@ -2,7 +2,8 @@
 
 `POST /search` accepts a `SearchRequest` body and returns a `SearchResponse`
 object. It searches SearXNG, optionally crawls the returned URLs, and cleans
-the resulting documents.
+the resulting documents. The endpoint is rate limited to 30 requests per 60
+seconds using Redis.
 
 ## Request
 
@@ -61,3 +62,6 @@ Each `CleanDocument` preserves the raw crawled fields and adds:
 
 If a pipeline stage fails, the endpoint returns a successful response with the
 original query, recorded timings, and an empty `documents` list.
+
+For the full lifecycle and stage fallback behavior, see the
+[request-flow guide](request-flow.md).
