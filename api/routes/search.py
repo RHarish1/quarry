@@ -27,9 +27,13 @@ router = APIRouter()
     ),
     response_description="A normalized response containing cleaned documents and stage timings.",
     responses={
-        200: {"description": "Search completed, including empty partial-failure results."},
+        200: {
+            "description": "Search completed, including empty partial-failure results."
+        },
         422: {"description": "The JSON request body did not match SearchRequest."},
-        429: {"description": "The Redis-backed limit of 30 requests per minute was exceeded."},
+        429: {
+            "description": "The Redis-backed limit of 30 requests per minute was exceeded."
+        },
     },
 )
 async def search(request: SearchRequest) -> SearchResponse:
