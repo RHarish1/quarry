@@ -87,7 +87,6 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
                 "crawl_websites": True,
                 "enable_caching": False,
                 "compress_output_using_headroom": False,
-                "flexible_formatting": "default_with_metadata",
                 "enhance_query": False,
                 "rank_and_score_deterministically": False,
                 "time_range": "day",

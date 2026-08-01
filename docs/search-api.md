@@ -27,7 +27,6 @@ seconds using Redis.
 | `crawl_websites` | `false` | Whether to crawl candidate result URLs. |
 | `enable_caching` | `false` | Cache non-empty responses in Redis for one hour. |
 | `compress_output_using_headroom` | `false` | Accepted by the schema; not currently used by the pipeline. |
-| `flexible_formatting` | `default_with_metadata` | Accepted by the schema; not currently used by the pipeline. |
 | `enhance_query` | `false` | Accepted by the schema; not currently used by the pipeline. |
 | `rank_and_score_deterministically` | `false` | Accepted by the schema; not currently used by the pipeline. |
 | `time_range` | `null` | One of `day`, `week`, `month`, or `year`. |

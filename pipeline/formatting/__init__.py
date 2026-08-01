@@ -1,1 +1,0 @@
-"""Formatting package for Quarry."""

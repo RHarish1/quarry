@@ -52,7 +52,6 @@ class SearchRequest(BaseModel):
     crawl_websites: bool = False
     enable_caching: bool = False
     compress_output_using_headroom: bool = False
-    flexible_formatting: FlexibleFormatting = FlexibleFormatting.DEFAULT_WITH_METADATA
     enhance_query: bool = False
     rank_and_score_deterministically: bool = False
     time_range: TimeRange | None = None
