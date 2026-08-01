@@ -1,23 +1,26 @@
 """Search route for Quarry."""
 
+import logging
+
 from fastapi import APIRouter
 
+from api.middleware import DEFAULT_RATE_LIMIT
 from models.search import SearchRequest, SearchResponse, SearchTimings
 from pipeline.pipeline import execute_search_pipeline
-import logging
-from api.middleware import DEFAULT_RATE_LIMIT
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/search", response_model=SearchResponse,dependencies=[DEFAULT_RATE_LIMIT])
+@router.post(
+    "/search", response_model=SearchResponse, dependencies=[DEFAULT_RATE_LIMIT]
+)
 async def search(request: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
 
     try:
         return await execute_search_pipeline(request)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return SearchResponse(
             query=request.query,
             timings=SearchTimings(

@@ -1,16 +1,16 @@
 """Logging configuration for Quarry."""
 
-from datetime import datetime
-from pathlib import Path
 import logging
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 
 def configure_logging() -> None:
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
-    log_file = log_dir / f"{datetime.now():%Y-%m-%d_%H-%M-%S}.log"
+    log_file = log_dir / f"{datetime.now(UTC):%Y-%m-%d_%H-%M-%S}.log"
 
     logging.basicConfig(
         level=logging.INFO,

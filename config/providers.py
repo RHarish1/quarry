@@ -3,5 +3,3 @@
 
 class Provider:
     """Base provider definition."""
-
-    pass

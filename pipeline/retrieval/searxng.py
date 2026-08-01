@@ -50,7 +50,9 @@ def _extract_results(payload: Mapping[str, object]) -> list[SearchResult]:
                 url=str(item.get("url", "")),
                 title=str(item.get("title", "")),
                 content=str(item.get("content", "")),
-                metadata={key: value for key, value in item.items() if key not in known_keys},
+                metadata={
+                    key: value for key, value in item.items() if key not in known_keys
+                },
             )
         )
 
@@ -83,7 +85,9 @@ async def search_searxng(request: SearchRequest) -> SearchResults:
     try:
         payload = response.json()
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail="Unexpected SearXNG response") from exc
+        raise HTTPException(
+            status_code=502, detail="Unexpected SearXNG response"
+        ) from exc
 
     if not isinstance(payload, Mapping):
         raise HTTPException(status_code=502, detail="Unexpected SearXNG response")

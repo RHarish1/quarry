@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
@@ -10,7 +10,7 @@ from api.app import app
 from api.middleware import DEFAULT_RATE_LIMIT
 from models.clean_document import CleanDocument, CleanDocuments
 from models.document import Document, Documents
-from models.search import SearchResult, SearchResults, SearchTimings
+from models.search import SearchResult, SearchResults
 from pipeline import pipeline as pipeline_module
 
 
@@ -38,7 +38,7 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
                     markdown="# Example\n\nBody",
                     html="<html></html>",
                     metadata={"engine": "google"},
-                    crawl_timestamp=datetime.now(timezone.utc),
+                    crawl_timestamp=datetime.now(UTC),
                     crawl_latency_ms=10.0,
                     crawl_status="success",
                     content_type="text/html",
@@ -57,7 +57,7 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
                     markdown="# Example\n\nBody",
                     html="<html></html>",
                     metadata={"engine": "google"},
-                    crawl_timestamp=datetime.now(timezone.utc),
+                    crawl_timestamp=datetime.now(UTC),
                     crawl_latency_ms=10.0,
                     crawl_status="success",
                     content_type="text/html",

@@ -12,9 +12,7 @@ def make_cache_key(request: SearchRequest) -> str:
     payload.pop("format", None)
 
     # Normalize query
-    payload["query"] = " ".join(
-        payload["query"].lower().split()
-    )
+    payload["query"] = " ".join(payload["query"].lower().split())
 
     # Order-independent fields
     payload["engines"] = sorted(payload["engines"])
@@ -26,8 +24,6 @@ def make_cache_key(request: SearchRequest) -> str:
         separators=(",", ":"),
     )
 
-    digest = hashlib.sha256(
-        canonical.encode("utf-8")
-    ).hexdigest()
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     return f"search:{digest}"

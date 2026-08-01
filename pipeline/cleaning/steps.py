@@ -17,7 +17,7 @@ def _split_code_fences(markdown: str) -> list[tuple[bool, str]]:
     cursor = 0
     for match in CODE_FENCE_PATTERN.finditer(markdown):
         if match.start() > cursor:
-            segments.append((False, markdown[cursor:match.start()]))
+            segments.append((False, markdown[cursor : match.start()]))
         segments.append((True, match.group(0)))
         cursor = match.end()
 
@@ -40,7 +40,9 @@ def normalize_markdown(markdown: str) -> str:
 def remove_cookie_banner_sections(markdown: str) -> str:
     """Remove cookie and consent banner sections."""
 
-    return _remove_blocks(markdown, {"cookie", "cookies", "consent", "accept all", "privacy settings"})
+    return _remove_blocks(
+        markdown, {"cookie", "cookies", "consent", "accept all", "privacy settings"}
+    )
 
 
 def remove_navigation_sections(markdown: str) -> str:
@@ -52,13 +54,17 @@ def remove_navigation_sections(markdown: str) -> str:
 def remove_footer_sections(markdown: str) -> str:
     """Remove footer boilerplate sections."""
 
-    return _remove_blocks(markdown, {"footer", "all rights reserved", "copyright", "site map"})
+    return _remove_blocks(
+        markdown, {"footer", "all rights reserved", "copyright", "site map"}
+    )
 
 
 def remove_advertisement_sections(markdown: str) -> str:
     """Remove advertisement boilerplate sections."""
 
-    return _remove_blocks(markdown, {"advertisement", "sponsored", "promo", "advert", "ad choices"})
+    return _remove_blocks(
+        markdown, {"advertisement", "sponsored", "promo", "advert", "ad choices"}
+    )
 
 
 def remove_duplicate_paragraphs(markdown: str) -> str:
@@ -136,7 +142,9 @@ def _remove_blocks(markdown: str, keywords: set[str]) -> str:
             continue
 
         blocks = _split_blocks(segment)
-        kept = [block for block in blocks if not _block_contains_keywords(block, keywords)]
+        kept = [
+            block for block in blocks if not _block_contains_keywords(block, keywords)
+        ]
         rewritten.append(_join_blocks(kept))
 
     return normalize_markdown("".join(rewritten))
@@ -148,7 +156,9 @@ def _block_contains_keywords(block: str, keywords: set[str]) -> bool:
 
 
 def _split_blocks(markdown: str) -> list[str]:
-    blocks = [block.strip() for block in re.split(r"\n\s*\n", markdown) if block.strip()]
+    blocks = [
+        block.strip() for block in re.split(r"\n\s*\n", markdown) if block.strip()
+    ]
     return blocks
 
 
