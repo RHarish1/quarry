@@ -7,7 +7,6 @@ from fastapi import APIRouter
 from api.middleware import DEFAULT_RATE_LIMIT
 from models.search import SearchRequest, SearchResponse, SearchTimings
 from pipeline.pipeline import execute_search_pipeline
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
