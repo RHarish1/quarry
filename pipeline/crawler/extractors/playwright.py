@@ -7,7 +7,10 @@ from time import perf_counter
 from playwright.async_api import async_playwright
 
 from pipeline.crawler.extractors.base import BaseExtractor
-from pipeline.crawler.extractors.trafilatura import _extract_with_trafilatura, _markdown_to_plain_text
+from pipeline.crawler.extractors.trafilatura import (
+    _extract_with_trafilatura,
+    _markdown_to_plain_text,
+)
 from pipeline.crawler.types import ExtractionResult, RawDocument
 
 
@@ -34,7 +37,8 @@ class PlaywrightTrafilaturaExtractor(BaseExtractor):
             rendered_html = await _render_html(raw_document.final_url, timeout_seconds=max(raw_document.fetch_duration_ms / 1000.0, 30.0))
             title, markdown, metadata = await _extract_with_trafilatura(rendered_html, raw_document.final_url)
             source_html = rendered_html
-        except Exception as exc:
+        except Exception as exc: # noqa: BLE001
+            # Any rendering failure falls back to the original HTML.
             rendered_html = html or raw_document.raw_html
             title, markdown, metadata = await _extract_with_trafilatura(rendered_html, raw_document.final_url)
             metadata = {**metadata, "render_error": str(exc)}

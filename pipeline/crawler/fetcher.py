@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import perf_counter
 
 import httpx
@@ -39,7 +39,7 @@ async def fetch_raw_document(
         final_url=str(response.url),
         http_status=response.status_code,
         response_headers=response_headers,
-        fetch_timestamp=datetime.now(timezone.utc),
+        fetch_timestamp=datetime.now(UTC),
         fetch_duration_ms=fetch_duration_ms,
         raw_html=raw_html,
         html_size=len(raw_html.encode("utf-8")),

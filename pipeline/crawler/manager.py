@@ -5,9 +5,17 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from pipeline.crawler.extractors import PlaywrightTrafilaturaExtractor, ReadabilityExtractor, TrafilaturaExtractor
+from pipeline.crawler.extractors import (
+    PlaywrightTrafilaturaExtractor,
+    ReadabilityExtractor,
+    TrafilaturaExtractor,
+)
 from pipeline.crawler.extractors.base import BaseExtractor
-from pipeline.crawler.quality import ExtractionQuality, ExtractionQualityThresholds, score_extraction
+from pipeline.crawler.quality import (
+    ExtractionQuality,
+    ExtractionQualityThresholds,
+    score_extraction,
+)
 from pipeline.crawler.types import ExtractedDocument, RawDocument
 
 logger = logging.getLogger(__name__)

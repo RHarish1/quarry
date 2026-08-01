@@ -9,7 +9,10 @@ from markdownify import markdownify as markdownify_html
 from readability import Document as ReadabilityDocument
 
 from pipeline.crawler.extractors.base import BaseExtractor
-from pipeline.crawler.extractors.trafilatura import _fallback_title, _markdown_to_plain_text
+from pipeline.crawler.extractors.trafilatura import (
+    _fallback_title,
+    _markdown_to_plain_text,
+)
 from pipeline.crawler.types import ExtractionResult, RawDocument
 
 

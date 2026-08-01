@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from models.search import CrawlRequest, SearchResult, SearchResults
 from pipeline.crawler import crawler as crawler_module
@@ -60,7 +60,7 @@ def _article_raw_document() -> RawDocument:
         final_url="https://example.com/article",
         http_status=200,
         response_headers={"content-type": "text/html; charset=utf-8"},
-        fetch_timestamp=datetime.now(timezone.utc),
+        fetch_timestamp=datetime.now(UTC),
         fetch_duration_ms=12.0,
         raw_html=html,
         html_size=len(html.encode("utf-8")),

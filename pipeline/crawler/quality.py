@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from lxml import html as lxml_html
+from lxml.etree import ParserError
 
 from pipeline.crawler.types import ExtractedDocument, RawDocument
-
 
 WORD_PATTERN = re.compile(r"\w+|[^\w\s]")
 BLANK_BLOCK_PATTERN = re.compile(r"\n\s*\n")
@@ -67,7 +67,7 @@ def _count_paragraphs(markdown: str) -> int:
 def _safe_html_root(raw_html: str):
     try:
         return lxml_html.fromstring(raw_html)
-    except Exception:
+    except ParserError:
         return None
 
 

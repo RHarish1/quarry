@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import re
-from datetime import UTC, datetime, timezone
+import logging
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
-from urllib.parse import urljoin
 from uuid import uuid4
 
 import httpx
-from bs4 import BeautifulSoup, Tag
-from bs4.element import NavigableString
-from markdownify import markdownify as md
-import logging
 
 from models.document import Document, Documents
 from models.search import CrawlRequest, SearchResult
