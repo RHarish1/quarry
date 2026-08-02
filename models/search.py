@@ -52,7 +52,7 @@ class SearchRequest(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "query": "FastAPI lifespan",
+                    "query": "GPT-5",
                     "crawl_websites": True,
                     "rank_and_score_deterministically": True,
                     "target_documents": 5,
@@ -60,6 +60,10 @@ class SearchRequest(BaseModel):
                     "compress_output": True,
                     "target_token_budget": 1024,
                     "enable_caching": True,
+                    "engines": ["google"],
+                    "language": "en",
+                    "categories": [],
+                    "time_range": "day",
                 }
             ]
         }
@@ -110,10 +114,6 @@ class SearchRequest(BaseModel):
     categories: list[str] = Field(
         default_factory=list,
         description="Optional SearXNG category names. The order does not affect caching.",
-    )
-    format: SearchFormat = Field(
-        default=SearchFormat.JSON,
-        description="Accepted for request compatibility; Quarry always asks SearXNG for JSON and responds with JSON.",
     )
     target_token_budget: int | None = Field(
         default=None,
@@ -171,6 +171,7 @@ class SearchTimings(BaseModel):
 class SearchResponse(BaseModel):
     """Normalized search result and timing information."""
 
+    request_id: str
     query: str
     timings: SearchTimings
     documents: list[CleanDocument] = Field(default_factory=list)

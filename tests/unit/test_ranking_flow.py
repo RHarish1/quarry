@@ -1,7 +1,8 @@
 """Ranking flow tests for Quarry."""
 
 from __future__ import annotations
-
+from uuid import uuid4
+request_id = str(uuid4())
 import asyncio
 from datetime import UTC, datetime
 
@@ -134,7 +135,7 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
         format=SearchFormat.JSON,
     )
 
-    response = asyncio.run(pipeline_module.execute_search_pipeline(request))
+    response = asyncio.run(pipeline_module.execute_search_pipeline(request, request_id))
 
     assert response.query == "quarry"
     assert len(response.documents) == 1
@@ -153,7 +154,7 @@ def test_pipeline_sets_compression_latency_to_zero_when_search_fails(
 
     response = asyncio.run(
         pipeline_module.execute_search_pipeline(
-            SearchRequest(query="quarry", compress_output=True)
+            SearchRequest(query="quarry", compress_output=True), request_id
         )
     )
 

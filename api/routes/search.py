@@ -1,8 +1,10 @@
 """Search route for Quarry."""
 
 import logging
+from uuid import uuid4
 
 from fastapi import APIRouter
+request_id = str(uuid4())
 
 from api.middleware import DEFAULT_RATE_LIMIT
 from models.search import SearchRequest, SearchResponse, SearchTimings
@@ -40,9 +42,10 @@ async def search(request: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
 
     try:
-        return await execute_search_pipeline(request)
+        return await execute_search_pipeline(request, request_id)
     except Exception:  # noqa: BLE001
         return SearchResponse(
+            request_id=request_id,
             query=request.query,
             timings=SearchTimings(
                 search_latency_ms=0.0,

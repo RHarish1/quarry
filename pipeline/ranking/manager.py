@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from pipeline.retrieval.robots import can_crawl
-
 from models.document import Documents
 from models.search import CrawlRequest, SearchResults
 from pipeline.crawler.crawler import crawl_documents
 from pipeline.crawler.quality import filter_quality as filter_documents_by_quality
+from pipeline.retrieval.robots import can_crawl
 
 from .constants import MIN_QUALITY_SCORE
 from .filters import filter_candidates

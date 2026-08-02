@@ -20,7 +20,9 @@ from .cache import get, make_cache_key, set
 logger = logging.getLogger(__name__)
 
 
-async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
+async def execute_search_pipeline(
+    request: SearchRequest, request_id: str
+) -> SearchResponse:
     """Run the search, crawl, and cleaning pipeline."""
     key = make_cache_key(request)
     if request.enhance_query:
@@ -56,6 +58,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     if search_results is None:
         total_request_latency_ms = (perf_counter() - total_started) * 1000.0
         return SearchResponse(
+            request_id=request_id,
             query=request.query,
             timings=SearchTimings(
                 search_latency_ms=search_latency_ms,
@@ -99,6 +102,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     if crawled_documents is None:
         total_request_latency_ms = (perf_counter() - total_started) * 1000.0
         return SearchResponse(
+            request_id=request_id,
             query=request.query,
             timings=SearchTimings(
                 search_latency_ms=search_latency_ms,
@@ -131,6 +135,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
     if cleaned_documents is None:
         total_request_latency_ms = (perf_counter() - total_started) * 1000.0
         return SearchResponse(
+            request_id=request_id,
             query=request.query,
             timings=SearchTimings(
                 search_latency_ms=search_latency_ms,
@@ -164,6 +169,7 @@ async def execute_search_pipeline(request: SearchRequest) -> SearchResponse:
 
     total_request_latency_ms = (perf_counter() - total_started) * 1000.0
     response = SearchResponse(
+        request_id=request_id,
         query=request.query,
         timings=SearchTimings(
             search_latency_ms=search_latency_ms,
