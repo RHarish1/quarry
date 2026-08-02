@@ -21,6 +21,10 @@ from pipeline import pipeline as pipeline_module
 from pipeline.ranking import manager as ranking_manager
 
 
+async def fake_can_crawl(candidates: list[SearchResult]) -> SearchResults:
+    return SearchResults(results=candidates)
+
+
 def _make_document(url: str, score: float) -> Document:
     return Document(
         id=url,
@@ -54,6 +58,7 @@ def test_rank_documents_uses_extraction_confidence(monkeypatch) -> None:
 
         return Documents()
 
+    monkeypatch.setattr(ranking_manager, "can_crawl", fake_can_crawl)
     monkeypatch.setattr(ranking_manager, "crawl_documents", fake_crawl_documents)
 
     search_results = SearchResults(

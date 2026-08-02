@@ -4,13 +4,31 @@ from .redis import get_redis
 
 DEFAULT_TTL_SECONDS = 3600
 
+from pipeline.resilience import (
+    REDIS_RETRY,
+    CircuitBreaker,
+    retry,
+)
+
+REDIS_BREAKER = CircuitBreaker(
+    name="redis",
+    failure_threshold=10,
+    recovery_timeout=10,
+)
+
 
 async def get(
     key: str,
 ) -> SearchResponse | None:
     redis = get_redis()
 
-    value = await redis.get(key)
+    value = await REDIS_BREAKER.execute(
+        lambda: retry(
+            lambda: redis.get(key),
+            provider="Redis",
+            policy=REDIS_RETRY,
+        )
+    )
 
     if value is None:
         return None
@@ -25,14 +43,26 @@ async def set(
 ) -> None:
     redis = get_redis()
 
-    await redis.set(
-        key,
-        response.model_dump_json(),
-        ex=ttl,
+    await REDIS_BREAKER.execute(
+        lambda: retry(
+            lambda: redis.set(
+                key,
+                response.model_dump_json(),
+                ex=ttl,
+            ),
+            provider="Redis",
+            policy=REDIS_RETRY,
+        )
     )
 
 
 async def delete(key: str) -> None:
     redis = get_redis()
 
-    await redis.delete(key)
+    await REDIS_BREAKER.execute(
+        lambda: retry(
+            lambda: redis.delete(key),
+            provider="Redis",
+            policy=REDIS_RETRY,
+        )
+    )
