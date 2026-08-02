@@ -23,6 +23,10 @@ class Settings:
     redis_url: str = field(
         default_factory=lambda: os.getenv("REDIS_URL", "redis://redis:6379/0")
     )
+    user_agent: str = "QuarryBot/0.3"
+    http_timeout_seconds: float = 30.0
+    http_max_connections: int = 100
+    http_max_keepalive_connections: int = 20
 
 
 settings = Settings()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Self
 
-from models.search import CleaningLevel, SearchFormat, SearchRequest
+from models.search import CleaningLevel, SearchRequest
 from pipeline.retrieval import searxng as searxng_module
 
 
@@ -48,7 +48,7 @@ class FakeAsyncClient:
 
 
 def test_search_searxng_maps_response_and_parameters(monkeypatch) -> None:
-    monkeypatch.setattr(searxng_module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(searxng_module, "get_http_client", lambda: FakeAsyncClient())
 
     request = SearchRequest(
         query="quarry",
@@ -62,7 +62,6 @@ def test_search_searxng_maps_response_and_parameters(monkeypatch) -> None:
         language="en",
         engines=["google"],
         categories=["general"],
-        format=SearchFormat.JSON,
     )
 
     results = asyncio.run(searxng_module.search_searxng(request))

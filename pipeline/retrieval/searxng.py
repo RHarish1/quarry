@@ -7,6 +7,19 @@ from fastapi import HTTPException
 
 from config.settings import settings
 from models.search import SearchRequest, SearchResult, SearchResults
+from pipeline.http import get_http_client
+from pipeline.resilience import (
+    FAST_PROVIDER_BREAKER,
+    SEARCH_PROVIDER_RETRY,
+    CircuitBreaker,
+    retry,
+)
+
+SEARXNG_BREAKER = CircuitBreaker(
+    name="searxng",
+    failure_threshold=FAST_PROVIDER_BREAKER.failure_threshold,
+    recovery_timeout=FAST_PROVIDER_BREAKER.recovery_timeout,
+)
 
 
 def _build_params(request: SearchRequest) -> dict[str, str]:
@@ -59,21 +72,18 @@ def _extract_results(payload: Mapping[str, object]) -> list[SearchResult]:
     return results
 
 
-async def search_searxng(request: SearchRequest) -> SearchResults:
-    """Query SearXNG and normalize the response into Quarry search results."""
+async def _raw_search(request: SearchRequest) -> SearchResults:
+    """Execute a single SearXNG request."""
 
     params = _build_params(request)
 
     try:
-        async with httpx.AsyncClient(
-            base_url=settings.searxng_base_url,
-            timeout=settings.searxng_timeout_seconds,
-        ) as client:
-            response = await client.post(
-                "/search",
-                data=params,
-                headers={"Accept": "application/json"},
-            )
+        client = get_http_client()
+        response = await client.post(
+            f"{settings.searxng_base_url}/search",
+            data=params,
+            headers={"Accept": "application/json"},
+        )
     except (httpx.TimeoutException, httpx.HTTPError) as exc:
         raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
     except Exception as exc:
@@ -86,10 +96,26 @@ async def search_searxng(request: SearchRequest) -> SearchResults:
         payload = response.json()
     except ValueError as exc:
         raise HTTPException(
-            status_code=502, detail="Unexpected SearXNG response"
+            status_code=502,
+            detail="Unexpected SearXNG response",
         ) from exc
 
     if not isinstance(payload, Mapping):
-        raise HTTPException(status_code=502, detail="Unexpected SearXNG response")
+        raise HTTPException(
+            status_code=502,
+            detail="Unexpected SearXNG response",
+        )
 
     return SearchResults(results=_extract_results(payload))
+
+
+async def search_searxng(request: SearchRequest) -> SearchResults:
+    """Query SearXNG with resilience."""
+
+    return await SEARXNG_BREAKER.execute(
+        lambda: retry(
+            lambda: _raw_search(request),
+            provider="SearXNG",
+            policy=SEARCH_PROVIDER_RETRY,
+        )
+    )

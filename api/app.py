@@ -8,16 +8,39 @@ from fastapi_limiter import FastAPILimiter
 from api.routes.search import router as search_router
 from config.logging import configure_logging
 from pipeline.cache import close_redis, get_redis
+from pipeline.http import (
+    close_http_client,
+    create_http_client,
+)
+from pipeline.resilience import ShutdownManager
 
 configure_logging()
 
+shutdown_manager = ShutdownManager()
+
 
 @asynccontextmanager
-async def lifespan(app):
+async def lifespan(app: FastAPI):
+    # -------------------------
+    # Startup
+    # -------------------------
+
+    await create_http_client()
+
     redis = get_redis()
     await FastAPILimiter.init(redis)
-    yield
-    await close_redis()
+
+    shutdown_manager.register_cleanup(close_http_client)
+    shutdown_manager.register_cleanup(close_redis)
+
+    try:
+        yield
+
+    finally:
+        # -------------------------
+        # Shutdown
+        # -------------------------
+        await shutdown_manager.shutdown()
 
 
 app = FastAPI(
@@ -28,7 +51,7 @@ app = FastAPI(
         "returns cleaned Markdown documents. Open the **Search** endpoint for "
         "field-by-field behavior and a ready-to-run example."
     ),
-    version="0.2.0",
+    version="0.4.0",
     openapi_tags=[
         {
             "name": "Search",

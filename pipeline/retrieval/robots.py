@@ -4,10 +4,21 @@ import logging
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
-import httpx
-
+from config.settings import settings
 from models.search import SearchResult, SearchResults
+from pipeline.http import get_http_client
+from pipeline.resilience import (
+    DEFAULT_RETRY,
+    FAST_PROVIDER_BREAKER,
+    CircuitBreaker,
+    retry,
+)
 
+ROBOTS_BREAKER = CircuitBreaker(
+    name="robots",
+    failure_threshold=FAST_PROVIDER_BREAKER.failure_threshold,
+    recovery_timeout=FAST_PROVIDER_BREAKER.recovery_timeout,
+)
 _cache: dict[str, RobotFileParser] = {}
 logger = logging.getLogger(__name__)
 
@@ -27,7 +38,7 @@ async def can_crawl(candidates: list[SearchResult]) -> SearchResults:
 
 async def can_fetch(
     url: str,
-    user_agent: str = "QuarryBot/1.0",
+    user_agent: str = settings.user_agent,
 ) -> bool:
     parsed = urlparse(url)
     host = f"{parsed.scheme}://{parsed.netloc}"
@@ -38,8 +49,14 @@ async def can_fetch(
         parser = RobotFileParser()
 
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                response = await client.get(robots_url)
+            client = get_http_client()
+            response = await ROBOTS_BREAKER.execute(
+                lambda: retry(
+                    lambda: client.get(robots_url),
+                    provider="robots.txt",
+                    policy=DEFAULT_RETRY,
+                )
+            )
 
             if response.status_code == 404:
                 return True
