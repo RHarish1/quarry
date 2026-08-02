@@ -4,6 +4,7 @@ import logging
 from uuid import uuid4
 
 from fastapi import APIRouter
+
 request_id = str(uuid4())
 
 from api.middleware import DEFAULT_RATE_LIMIT

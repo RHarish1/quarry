@@ -1,7 +1,9 @@
 """Ranking flow tests for Quarry."""
 
 from __future__ import annotations
+
 from uuid import uuid4
+
 request_id = str(uuid4())
 import asyncio
 from datetime import UTC, datetime
@@ -11,7 +13,6 @@ from models.document import Document, Documents
 from models.search import (
     CleaningLevel,
     CrawlRequest,
-    SearchFormat,
     SearchRequest,
     SearchResult,
     SearchResults,
@@ -132,7 +133,6 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
         rank_and_score_deterministically=True,
         compress_output=True,
         target_token_budget=128,
-        format=SearchFormat.JSON,
     )
 
     response = asyncio.run(pipeline_module.execute_search_pipeline(request, request_id))
