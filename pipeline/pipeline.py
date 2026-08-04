@@ -7,7 +7,13 @@ from time import perf_counter
 
 from config.settings import settings
 from models.clean_document import CleanRequest
-from models.search import CrawlRequest, SearchRequest, SearchResponse, SearchTimings
+from models.search import (
+    CrawlRequest,
+    SearchBenchmark,
+    SearchRequest,
+    SearchResponse,
+    SearchTimings,
+)
 from pipeline.cleaning.cleaner import clean_documents
 from pipeline.compression.compressor import compress_documents
 from pipeline.crawler.crawler import crawl_documents
@@ -24,17 +30,33 @@ async def execute_search_pipeline(
     request: SearchRequest, request_id: str
 ) -> SearchResponse:
     """Run the search, crawl, and cleaning pipeline."""
-    key = make_cache_key(request)
+    key = ""
+    benchmark = SearchBenchmark(
+        timings=SearchTimings(
+            search_latency_ms=0,
+            crawl_latency_ms=0,
+            cleaning_latency_ms=0,
+            compression_latency_ms=0,
+            total_request_latency_ms=0,
+        )
+    )
+
     if request.enhance_query:
         logger.info("Original query: %s", request.query)
         request = normalize_query(request)
 
     if request.enable_caching:
+        key = make_cache_key(request)
         logger.info("Cache Check")
+        t = perf_counter()
         cached = await get(key)
+        benchmark.cache_lookup_ms = (perf_counter() - t) * 1000
+
         if cached is not None:
             logger.info("Cache Hit!")
+            benchmark.cache_hit = True
             return cached
+
         logger.info("Cache Miss!")
 
     logger.info(
@@ -49,6 +71,7 @@ async def execute_search_pipeline(
         search_results = await search_searxng(request)
         logger.info("Returned from search_searxng: %r", search_results)
         logger.info("Type: %s", type(search_results))
+        benchmark.urls_found = len(search_results.results)
 
     except Exception:
         logger.exception("Search stage failed")
@@ -90,6 +113,7 @@ async def execute_search_pipeline(
                 search_results,
                 target_documents=request.target_documents,
                 crawl_request=crawl_request,
+                benchmark=benchmark,
             )
         else:
             crawled_documents = await crawl_documents(crawl_request)
@@ -120,6 +144,11 @@ async def execute_search_pipeline(
     )
     logger.info("Starting cleaning stage")
     cleaning_started = perf_counter()
+
+    benchmark.bytes_before = sum(
+        len(doc.markdown.encode("utf-8")) for doc in crawled_documents.documents
+    )
+
     try:
         cleaned_documents = clean_documents(
             CleanRequest(
@@ -151,7 +180,9 @@ async def execute_search_pipeline(
         len(cleaned_documents.documents),
         cleaning_latency_ms,
     )
-
+    benchmark.tokens_before = sum(
+        doc.original_token_count for doc in cleaned_documents.documents
+    )
     compression_latency_ms = 0.0
     if request.compress_output:
         compression_started = perf_counter()
@@ -167,6 +198,14 @@ async def execute_search_pipeline(
     else:
         compressed_documents = cleaned_documents
 
+    benchmark.bytes_after = sum(
+        len(doc.markdown.encode("utf-8")) for doc in compressed_documents.documents
+    )
+
+    benchmark.tokens_after = sum(
+        doc.cleaned_token_count for doc in compressed_documents.documents
+    )
+
     total_request_latency_ms = (perf_counter() - total_started) * 1000.0
     response = SearchResponse(
         request_id=request_id,
@@ -180,8 +219,10 @@ async def execute_search_pipeline(
         ),
         documents=compressed_documents.documents,
     )
-
+    benchmark.timings = response.timings
     if request.enable_caching and response.documents:
+        t = perf_counter()
         await set(key, response)
+        benchmark.cache_write_ms = (perf_counter() - t) * 1000
 
     return response

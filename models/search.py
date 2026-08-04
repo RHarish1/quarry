@@ -175,3 +175,87 @@ class SearchResponse(BaseModel):
     query: str
     timings: SearchTimings
     documents: list[CleanDocument] = Field(default_factory=list)
+
+
+class SearchBenchmark(BaseModel):
+    """Key benchmarking metrics collected for a search request."""
+
+    timings: SearchTimings = Field(
+        description="Latency measurements for each pipeline stage."
+    )
+
+    # Cache
+    cache_hit: bool = Field(
+        default=False, description="Whether the response was served from cache."
+    )
+
+    cache_lookup_ms: float = Field(
+        default=0.0, ge=0.0, description="Time spent checking the cache."
+    )
+
+    cache_write_ms: float = Field(
+        default=0.0, ge=0.0, description="Time spent writing the response to the cache."
+    )
+
+    # Search / Filtering
+    urls_found: int = Field(
+        default=0,
+        ge=0,
+        description="Number of candidate URLs returned by the search provider.",
+    )
+    crawlable_urls: int = Field(
+        default=0,
+        ge=0,
+        description="Number of URLs we are allowed to crawl referring to robots.txt.",
+    )
+    urls_filtered_out: int = Field(
+        default=0,
+        ge=0,
+        description="Number of URLs removed by deterministic filtering before crawling.",
+    )
+
+    # Crawling
+    pages_crawled: int = Field(
+        default=0, ge=0, description="Number of pages successfully crawled."
+    )
+    crawl_failures: int = Field(
+        default=0, ge=0, description="Number of pages that failed to crawl."
+    )
+    average_crawl_depth: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Average crawl depth across all successfully crawled pages.",
+    )
+
+    # Compression
+    bytes_before: int = Field(
+        default=0,
+        ge=0,
+        description="Total size of documents before compression and cleaning (bytes).",
+    )
+    bytes_after: int = Field(
+        default=0,
+        ge=0,
+        description="Total size of documents after compression (bytes).",
+    )
+
+    tokens_before: int = Field(
+        default=0,
+        ge=0,
+        description="Estimated token count before compression and cleaning.",
+    )
+    tokens_after: int = Field(
+        default=0, ge=0, description="Estimated token count after compression."
+    )
+
+    @property
+    def compression_ratio(self) -> float:
+        if self.bytes_before == 0:
+            return 0.0
+        return self.bytes_after / self.bytes_before
+
+    @property
+    def token_reduction_ratio(self) -> float:
+        if self.tokens_before == 0:
+            return 0.0
+        return (self.tokens_before - self.tokens_after) / self.tokens_before

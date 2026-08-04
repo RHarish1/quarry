@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from models.document import Documents
-from models.search import CrawlRequest, SearchResults
+from models.search import CrawlRequest, SearchBenchmark, SearchResults
 from pipeline.crawler.crawler import crawl_documents
 from pipeline.crawler.quality import filter_quality as filter_documents_by_quality
 from pipeline.retrieval.robots import can_crawl
@@ -18,6 +18,7 @@ async def rank_documents(
     *,
     target_documents: int,
     crawl_request: CrawlRequest,
+    benchmark: SearchBenchmark | None = None,
 ) -> Documents:
     """
     Produce a fixed number of high-quality documents.
@@ -39,10 +40,13 @@ async def rank_documents(
     """
     allowed_websites = await can_crawl(search_results.results)
     candidates = filter_candidates(allowed_websites.results)
+    if benchmark:
+        benchmark.urls_filtered_out = len(candidates)
+        benchmark.crawlable_urls = len(allowed_websites.results)
 
     accepted_documents = []
     current_index = 0
-
+    # average_crawl_depth will be calculated once queue based crawling is implemented
     while len(accepted_documents) < target_documents:
         batch = select_recall_candidates(
             candidates,
@@ -82,5 +86,7 @@ async def rank_documents(
         key=lambda document: document.metadata.get("quality_score", 0.0),
         reverse=True,
     )
-
+    if benchmark:
+        benchmark.pages_crawled = target_documents
+        benchmark.crawl_failures = current_index - target_documents + 1
     return Documents(documents=accepted_documents[:target_documents])

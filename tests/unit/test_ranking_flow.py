@@ -102,7 +102,13 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
             ]
         )
 
-    async def fake_rank_documents(search_results, *, target_documents, crawl_request):
+    async def fake_rank_documents(
+        search_results,
+        *,
+        target_documents,
+        crawl_request,
+        benchmark=None,
+    ):
         return Documents(documents=[_make_document("https://example.com/article", 0.9)])
 
     def fake_clean_documents(clean_request):
