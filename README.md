@@ -79,8 +79,8 @@ to the command that starts the app.
 | --- | --- | --- |
 | `SEARXNG_BASE_URL` | `http://searxng:8080` | URL of the SearXNG service. |
 | `SEARXNG_TIMEOUT_SECONDS` | `20` | Timeout for SearXNG requests. |
-| `CRAWL_TIMEOUT_SECONDS` | `30` | Timeout for crawling a page. |
-| `CRAWL_MAX_CONCURRENCY` | `4` | Maximum number of concurrent crawls. |
+| `CRAWL_TIMEOUT_SECONDS` | `15` | Timeout for crawling a page. |
+| `CRAWL_MAX_CONCURRENCY` | `5` | Maximum number of concurrent crawls. |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL used for response caching. |
 
 The defaults use Docker Compose service names. Override `SEARXNG_BASE_URL` and

@@ -187,8 +187,8 @@ The application reads only these environment variables at startup:
 | --- | --- | --- |
 | `SEARXNG_BASE_URL` | `http://searxng:8080` | Retrieval client |
 | `SEARXNG_TIMEOUT_SECONDS` | `20` | Retrieval timeout |
-| `CRAWL_TIMEOUT_SECONDS` | `30` | HTTP crawling timeout |
-| `CRAWL_MAX_CONCURRENCY` | `4` | Crawl semaphore |
+| `CRAWL_TIMEOUT_SECONDS` | `15` | HTTP crawling timeout |
+| `CRAWL_MAX_CONCURRENCY` | `5` | Crawl semaphore |
 | `REDIS_URL` | `redis://redis:6379/0` | Rate limiter and cache |
 
 The shared HTTP client also uses fixed application settings: user agent

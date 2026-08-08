@@ -14,7 +14,7 @@ server:
 outgoing:
   request_timeout: 3.0
   useragent_suffix: "Mozilla/5.0"
-  max_request_timeout: 2.0
+  max_request_timeout: 3.0
 
 engines:
   - name: wikipedia

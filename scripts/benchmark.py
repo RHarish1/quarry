@@ -51,7 +51,7 @@ async def run_single(client, query, config, mode="benchmark"):
     payload = {
         "query": query,
         "cleaning_level": 1,
-        "target_documents": 5,
+        "target_documents": 2,
         **config,
     }
 
