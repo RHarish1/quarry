@@ -60,7 +60,7 @@ class SearchRequest(BaseModel):
                     "compress_output": True,
                     "target_token_budget": 1024,
                     "enable_caching": True,
-                    "engines": ["google"],
+                    "engines": [""],
                     "language": "en",
                     "categories": [],
                     "time_range": "day",
@@ -168,15 +168,6 @@ class SearchTimings(BaseModel):
     )
 
 
-class SearchResponse(BaseModel):
-    """Normalized search result and timing information."""
-
-    request_id: str
-    query: str
-    timings: SearchTimings
-    documents: list[CleanDocument] = Field(default_factory=list)
-
-
 class SearchBenchmark(BaseModel):
     """Key benchmarking metrics collected for a search request."""
 
@@ -215,7 +206,7 @@ class SearchBenchmark(BaseModel):
     )
 
     # Crawling
-    pages_crawled: int = Field(
+    pages_successfully_crawled: int = Field(
         default=0, ge=0, description="Number of pages successfully crawled."
     )
     crawl_failures: int = Field(
@@ -259,3 +250,14 @@ class SearchBenchmark(BaseModel):
         if self.tokens_before == 0:
             return 0.0
         return (self.tokens_before - self.tokens_after) / self.tokens_before
+
+
+class SearchResponse(BaseModel):
+    """Normalized search result and timing information."""
+
+    success: bool
+    request_id: str
+    query: str
+    timings: SearchTimings
+    documents: list[CleanDocument] = Field(default_factory=list)
+    benchmark: SearchBenchmark
