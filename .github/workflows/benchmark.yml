@@ -9,6 +9,9 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    
+    env:
+      REDIS_URL: redis://localhost:6379/0
 
     services:
       redis:
@@ -70,3 +73,5 @@ jobs:
 
       - name: Run benchmark
         run: uv run python scripts/benchmark.py
+
+      
