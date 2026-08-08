@@ -66,8 +66,6 @@ async def run_single(client, query, config, mode="benchmark"):
         )
         res.raise_for_status()
         data = res.json()
-        print(res.status_code)
-        print(res.text[:500])
         total_ms = (time.perf_counter() - t0) * 1000
 
         return {
@@ -120,11 +118,10 @@ def summarize(results):
         "p95": percentile(latencies, 0.95),
         "p99": percentile(latencies, 0.99),
         "cache_hit_rate": cache_hits / len(benchmarks) if benchmarks else 0,
-        "avg_token_reduction": (
-            mean((b - a) / b for b, a in zip(tokens_before, tokens_after) if b > 0)
-            if tokens_before
-            else 0
-        ),
+        "avg_token_reduction_pct": (
+        (sum((b - a) / b for b, a in zip(tokens_before, tokens_after) if b > 0) / len(tokens_before) * 100)
+        if tokens_before else 0
+    ),
     }
 
 
