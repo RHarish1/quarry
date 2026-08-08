@@ -32,12 +32,23 @@ jobs:
 
       - name: Start SearXNG with custom config
         run: |
+          mkdir -p ${{ github.workspace }}/searxng
+          cat <<EOF > ${{ github.workspace }}/searxng/settings.yml
+          search:
+            formats:
+              - html
+              - json
+          server:
+            port: 8080
+            bind_address: "0.0.0.0"
+            secret_key: "quarry-benchmark-secret"
+          EOF
           chmod 644 ${{ github.workspace }}/searxng/settings.yml
-
+          
           docker run -d \
             --name searxng \
             -p 8080:8080 \
-            -v ${{ github.workspace }}/searxng/settings.yml:/etc/searxng/settings.yml \
+            -v ${{ github.workspace }}/searxng/settings.yml:/etc/searxng/settings.yml:ro \
             searxng/searxng:latest
 
       - name: Verify Tavily API Key Presence & Direct Test
