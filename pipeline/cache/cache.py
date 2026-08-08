@@ -17,7 +17,7 @@ REDIS_BREAKER = CircuitBreaker(
 )
 
 
-async def get(
+async def get_cache(
     key: str,
 ) -> SearchResponse | None:
     redis = get_redis()
@@ -36,7 +36,7 @@ async def get(
     return SearchResponse.model_validate_json(value)
 
 
-async def set(
+async def set_cache(
     key: str,
     response: SearchResponse,
     ttl: int = DEFAULT_TTL_SECONDS,
