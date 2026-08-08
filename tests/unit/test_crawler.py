@@ -144,7 +144,9 @@ def test_extractor_manager_falls_back_to_later_extractor() -> None:
 def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
     raw_document = _article_raw_document()
 
-    async def fake_fetch_raw_document(search_result, timeout_seconds):
+    async def fake_fetch_raw_document(
+        search_result, timeout_seconds, mode="production"
+    ):
         if search_result.url.endswith("/missing"):
             raise RuntimeError("fetch failed")
         return raw_document
@@ -190,7 +192,9 @@ def test_crawler_preserves_internal_html_only(monkeypatch) -> None:
         max_concurrency=2,
     )
 
-    documents = asyncio.run(crawler_module.crawl_documents(crawl_request))
+    documents = asyncio.run(
+        crawler_module.crawl_documents(crawl_request, mode="production")
+    )
 
     assert len(documents.documents) == 2
     document = documents.documents[0]

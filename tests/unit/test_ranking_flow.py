@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
-
-request_id = str(uuid4())
 import asyncio
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from models.clean_document import CleanDocument, CleanDocuments
 from models.document import Document, Documents
@@ -42,7 +40,9 @@ def _make_document(url: str, score: float) -> Document:
 
 
 def test_rank_documents_uses_extraction_confidence(monkeypatch) -> None:
-    async def fake_crawl_documents(crawl_request: CrawlRequest) -> Documents:
+    async def fake_crawl_documents(
+        crawl_request: CrawlRequest, mode: str = "production"
+    ) -> Documents:
         urls = [result.url for result in crawl_request.search_results.results]
 
         if urls == ["https://example.com/1", "https://example.com/2"]:
@@ -79,6 +79,7 @@ def test_rank_documents_uses_extraction_confidence(monkeypatch) -> None:
             search_results,
             target_documents=2,
             crawl_request=crawl_request,
+            mode="production",
         )
     )
 
@@ -108,6 +109,7 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
         target_documents,
         crawl_request,
         benchmark=None,
+        mode,
     ):
         return Documents(documents=[_make_document("https://example.com/article", 0.9)])
 
@@ -145,8 +147,10 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
         compress_output=True,
         target_token_budget=128,
     )
-
-    response = asyncio.run(pipeline_module.execute_search_pipeline(request, request_id))
+    request_id = str(uuid4())
+    response = asyncio.run(
+        pipeline_module.execute_search_pipeline(request, request_id, mode="production")
+    )
 
     assert response.query == "quarry"
     assert len(response.documents) == 1
@@ -162,10 +166,12 @@ def test_pipeline_sets_compression_latency_to_zero_when_search_fails(
         raise RuntimeError("SearXNG unavailable")
 
     monkeypatch.setattr(pipeline_module, "search_searxng", failing_search_searxng)
-
+    request_id = str(uuid4())
     response = asyncio.run(
         pipeline_module.execute_search_pipeline(
-            SearchRequest(query="quarry", compress_output=True), request_id
+            SearchRequest(query="quarry", compress_output=True),
+            request_id,
+            mode="production",
         )
     )
 

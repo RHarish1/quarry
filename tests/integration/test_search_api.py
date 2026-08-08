@@ -27,7 +27,7 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
             ]
         )
 
-    async def fake_crawl_documents(crawl_request):
+    async def fake_crawl_documents(crawl_request, mode="production"):
         return Documents(
             documents=[
                 Document(
