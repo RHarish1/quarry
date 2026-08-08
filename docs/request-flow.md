@@ -185,7 +185,7 @@ The application reads only these environment variables at startup:
 
 | Variable | Default | Used by |
 | --- | --- | --- |
-| `SEARXNG_BASE_URL` | `http://searxng:8080` | Retrieval client |
+| `SEARXNG_BASE_URL` | `http://localhost:8080` | Retrieval client |
 | `SEARXNG_TIMEOUT_SECONDS` | `20` | Retrieval timeout |
 | `CRAWL_TIMEOUT_SECONDS` | `15` | HTTP crawling timeout |
 | `CRAWL_MAX_CONCURRENCY` | `5` | Crawl semaphore |

@@ -23,7 +23,7 @@ SEARXNG_BREAKER = CircuitBreaker(
 
 
 def _build_params(request: SearchRequest) -> dict[str, str]:
-    """Build a form payload for SearXNG."""
+    """Build query parameters for SearXNG."""
 
     params: dict[str, str] = {
         "q": request.query,
@@ -76,34 +76,36 @@ async def _raw_search(request: SearchRequest) -> SearchResults:
     """Execute a single SearXNG request."""
 
     params = _build_params(request)
+    base_url = settings.searxng_base_url.rstrip("/")
 
     try:
         client = get_http_client()
-        response = await client.post(
-            f"{settings.searxng_base_url}/search",
-            data=params,
+        # Use GET request with params for standard SearXNG API behavior
+        response = await client.get(
+            f"{base_url}/search",
+            params=params,
             headers={"Accept": "application/json"},
         )
     except (httpx.TimeoutException, httpx.HTTPError) as exc:
-        raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
+        raise HTTPException(status_code=502, detail=f"SearXNG connection failed to {base_url}: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
 
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="SearXNG returned an error")
+        raise HTTPException(status_code=502, detail=f"SearXNG returned HTTP {response.status_code}")
 
     try:
         payload = response.json()
     except ValueError as exc:
         raise HTTPException(
             status_code=502,
-            detail="Unexpected SearXNG response",
+            detail="Unexpected non-JSON SearXNG response",
         ) from exc
 
     if not isinstance(payload, Mapping):
         raise HTTPException(
             status_code=502,
-            detail="Unexpected SearXNG response",
+            detail="Unexpected SearXNG response payload structure",
         )
 
     return SearchResults(results=_extract_results(payload))

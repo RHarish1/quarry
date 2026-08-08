@@ -30,7 +30,7 @@ engines:
     disabled: true
 
   - name: google
-    disabled: false
+    disabled: true
 
   - name: qwant
     disabled: false

@@ -77,7 +77,7 @@ to the command that starts the app.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SEARXNG_BASE_URL` | `http://searxng:8080` | URL of the SearXNG service. |
+| `SEARXNG_BASE_URL` | `http://localhost:8080` | URL of the SearXNG service. |
 | `SEARXNG_TIMEOUT_SECONDS` | `20` | Timeout for SearXNG requests. |
 | `CRAWL_TIMEOUT_SECONDS` | `15` | Timeout for crawling a page. |
 | `CRAWL_MAX_CONCURRENCY` | `5` | Maximum number of concurrent crawls. |

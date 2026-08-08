@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      REDIS_URL: redis://localhost:6379/0
+      REDIS_URL: redis://127.0.0.1:6379/0
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-      SEARXNG_URL: http://localhost:8080
+      SEARXNG_BASE_URL: http://127.0.0.1:8080
 
     services:
       redis:
@@ -32,12 +32,32 @@ jobs:
 
       - name: Start SearXNG with custom config
         run: |
-          # ✅ Start SearXNG after checkout so we can mount settings.yml
           docker run -d \
             --name searxng \
-            -p 8080:8080 \
+            -p 127.0.0.1:8080:8080 \
             -v ${{ github.workspace }}/searxng/settings.yml:/etc/searxng/settings.yml \
             searxng/searxng:latest
+
+      - name: Verify Tavily API Key Presence & Direct Test
+        run: |
+          if [ -z "$TAVILY_API_KEY" ]; then
+            echo "❌ ERROR: TAVILY_API_KEY is empty! Move it to Repository Secrets or specify 'environment' in job."
+            exit 1
+          else
+            echo "✅ TAVILY_API_KEY is set (length: ${#TAVILY_API_KEY})"
+          fi
+
+          echo "Testing direct connection to Tavily API..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://api.tavily.com/search \
+            -H "Content-Type: application/json" \
+            -d "{\"api_key\": \"$TAVILY_API_KEY\", \"query\": \"test\"}")
+          
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Tavily API authentication successful (HTTP 200)"
+          else
+            echo "❌ Tavily API returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
 
       - uses: astral-sh/setup-uv@v5
 
@@ -51,7 +71,7 @@ jobs:
       - name: Wait for SearXNG
         run: |
           for i in {1..60}; do
-            if curl -sf http://localhost:8080 > /dev/null; then
+            if curl -sf http://127.0.0.1:8080 > /dev/null; then
               echo "✅ SearXNG ready"
               exit 0
             fi
@@ -60,10 +80,13 @@ jobs:
           done
           
           echo "❌ SearXNG not ready"
+          docker logs searxng
           
-      - name: Debug SearXNG response
+      - name: Debug SearXNG JSON Endpoint
         run: |
-          curl -s "http://localhost:8080/search?q=python&format=json" | head -c 1000
+          echo "Testing direct query to SearXNG JSON API..."
+          curl -s "http://127.0.0.1:8080/search?q=python&format=json" | head -c 1000
+          echo ""
 
       - name: Start API
         run: |
@@ -74,17 +97,14 @@ jobs:
 
           echo "Started API with PID $PID"
 
-          # Wait for readiness (max 60s)
           for i in {1..60}; do
-            # Check if process died
             if ! kill -0 $PID 2>/dev/null; then
               echo "❌ API process crashed"
               cat uvicorn.log
               exit 1
             fi
 
-            # Strict health check
-            if curl -sf http://localhost:8000/health > /dev/null; then
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
               echo "✅ API ready"
               exit 0
             fi
@@ -97,12 +117,17 @@ jobs:
           cat uvicorn.log
           exit 1
           
-      - name: Show API logs if failed
+      - name: Dump logs on failure
         if: failure()
-        run: cat uvicorn.log
+        run: |
+          echo "=== SearXNG Container Logs ==="
+          docker logs searxng
+          echo "=== Uvicorn Logs ==="
+          cat uvicorn.log
 
       - name: Run benchmark
         run: uv run python scripts/benchmark.py
 
       - name: Show API logs
+        if: always()
         run: cat uvicorn.log
