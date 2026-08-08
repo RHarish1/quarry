@@ -12,7 +12,7 @@ server:
   secret_key: "change-me"
 
 outgoing:
-  request_timeout: 1.0   # 🔥 kill 3s latency
+  request_timeout: 3.0
   useragent_suffix: "Mozilla/5.0"
   max_request_timeout: 2.0
 
@@ -30,7 +30,12 @@ engines:
     disabled: true
 
   - name: google
-    disabled: true
+    disabled: false
 
   - name: qwant
     disabled: false
+
+  - name: youtube
+    engine: youtube
+    shortcut: yt
+    disabled: true
