@@ -40,7 +40,7 @@ jobs:
         run: |
           for i in {1..60}; do
             # Check JSON endpoint specifically (important)
-            if curl -sf http://localhost:8080 > /dev/null > /dev/null; then
+            if curl -sf http://localhost:8080 > /dev/null; then
               echo "✅ SearXNG ready"
               exit 0
             fi
@@ -89,5 +89,8 @@ jobs:
 
       - name: Run benchmark
         run: uv run python scripts/benchmark.py
+
+      - name: Show API logs
+        run: cat uvicorn.log
 
       
