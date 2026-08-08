@@ -40,21 +40,31 @@ router = APIRouter()
         },
     },
 )
-async def search(request: SearchRequest) -> SearchResponse:
+async def search(req: Request, body: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
-
+    start = perf_counter()
+    mode = req.headers.get("x-mode", "production")
     try:
-        return await execute_search_pipeline(request, request_id)
+        return await execute_search_pipeline(body, request_id, mode)
+
     except Exception:  # noqa: BLE001
-        return SearchResponse(
-            request_id=request_id,
-            query=request.query,
+        total_latency = (perf_counter() - start) * 1000
+
+        benchmark = SearchBenchmark(
             timings=SearchTimings(
                 search_latency_ms=0.0,
                 crawl_latency_ms=0.0,
                 cleaning_latency_ms=0.0,
                 compression_latency_ms=0.0,
-                total_request_latency_ms=0.0,
+                total_request_latency_ms=total_latency,
             ),
+        )
+
+        return SearchResponse(
+            success=False,
+            request_id=request_id,
+            query=body.query,
+            timings=benchmark.timings,
+            benchmark=benchmark,
             documents=[],
         )
