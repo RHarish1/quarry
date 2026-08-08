@@ -16,7 +16,14 @@ from pipeline.crawler.types import ExtractionResult, RawDocument
 
 async def _render_html(url: str, timeout_seconds: float) -> str:
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(
+            executable_path="/usr/bin/chromium",
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
         try:
             page = await browser.new_page(viewport={"width": 1440, "height": 1200})
             await page.goto(
