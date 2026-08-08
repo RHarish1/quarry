@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi_limiter import FastAPILimiter
 from prometheus_fastapi_instrumentator import Instrumentator
+
 from api.routes.search import router as search_router
 from config.logging import configure_logging
 from pipeline.cache import close_redis, get_redis
@@ -66,6 +67,7 @@ app = FastAPI(
 )
 # Initialize and instrument the FastAPI application
 Instrumentator().instrument(app).expose(app)
+
 
 @app.get("/", tags=["System"], summary="Get service metadata")
 async def root() -> dict[str, str]:
