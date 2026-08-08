@@ -31,6 +31,21 @@ class FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
 
+    async def get(self, url, params=None, headers=None, **kwargs):
+        FakeAsyncClient.last_data = params
+        return FakeResponse(
+            {
+                "results": [
+                    {
+                        "url": "https://example.com/one",
+                        "title": "One",
+                        "content": "Snippet",
+                        "engine": "google",
+                    }
+                ]
+            }
+        )
+
     async def post(self, path: str, data: dict[str, str], headers: dict[str, str]):
         FakeAsyncClient.last_data = data
         return FakeResponse(

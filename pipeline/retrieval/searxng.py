@@ -87,12 +87,16 @@ async def _raw_search(request: SearchRequest) -> SearchResults:
             headers={"Accept": "application/json"},
         )
     except (httpx.TimeoutException, httpx.HTTPError) as exc:
-        raise HTTPException(status_code=502, detail=f"SearXNG connection failed to {base_url}: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"SearXNG connection failed to {base_url}: {exc}"
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="SearXNG request failed") from exc
 
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"SearXNG returned HTTP {response.status_code}")
+        raise HTTPException(
+            status_code=502, detail=f"SearXNG returned HTTP {response.status_code}"
+        )
 
     try:
         payload = response.json()
