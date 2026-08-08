@@ -30,8 +30,6 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv sync --no-dev --frozen --no-install-project
 
-RUN uv run --no-project playwright install --with-deps chromium
-
 COPY . .
 
 RUN uv sync --no-dev --frozen
