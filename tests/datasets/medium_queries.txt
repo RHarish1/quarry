@@ -1,0 +1,10 @@
+redis vs memcached performance
+fastapi vs flask benchmark
+how does async await work in python
+best practices for rest api design
+what is circuit breaker pattern
+how does kafka work internally
+sql vs nosql when to use
+how does load balancing work
+explain microservices architecture
+how to optimize database queries

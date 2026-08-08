@@ -1,0 +1,10 @@
+what is redis
+what is fastapi
+what is http
+python list comprehension
+what is docker
+what is linux kernel
+what is cache memory
+difference between tcp and udp
+what is api
+what is json
