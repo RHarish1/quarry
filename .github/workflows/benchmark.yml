@@ -12,6 +12,7 @@ jobs:
     
     env:
       REDIS_URL: redis://localhost:6379/0
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
 
     services:
       redis:
@@ -35,7 +36,23 @@ jobs:
 
       - name: Install deps
         run: uv sync --locked
+      - name: Wait for SearXNG
+        run: |
+          for i in {1..60}; do
+            # Check JSON endpoint specifically (important)
+            if curl -sf "http://localhost:8080/search?q=test&format=json" > /dev/null; then
+              echo "✅ SearXNG ready"
+              exit 0
+            fi
+            echo "Waiting for SearXNG... ($i)"
+            sleep 1
+          done
 
+          echo "❌ SearXNG not ready"
+          exit 1
+      - name: Debug SearXNG response
+        run: |
+          curl "http://localhost:8080/search?q=python&format=json" | head -c 1000
       - name: Start API
         run: |
           set -e
