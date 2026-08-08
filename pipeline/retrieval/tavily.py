@@ -7,7 +7,7 @@ from models.search import SearchResult, SearchResults
 TAVILY_API_URL = "https://api.tavily.com/search"
 
 
-async def search_tavily(query: str, max_results: int = 10) -> SearchResults:
+async def search_tavily(query: str, max_results: int = 20) -> SearchResults:
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         return SearchResults()

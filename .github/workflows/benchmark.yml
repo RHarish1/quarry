@@ -35,16 +35,35 @@ jobs:
 
       - name: Start API
         run: |
+          set -e
+
           uv run uvicorn api.app:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
-          
-          for i in {1..30}; do
-            if curl -s http://localhost:8000/health; then
-              echo "API ready"
-              break
+          PID=$!
+
+          echo "Started API with PID $PID"
+
+          # Wait for readiness (max 60s)
+          for i in {1..60}; do
+            # Check if process died
+            if ! kill -0 $PID 2>/dev/null; then
+              echo "❌ API process crashed"
+              cat uvicorn.log
+              exit 1
             fi
-            echo "Waiting for API..."
+
+            # Strict health check
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "✅ API ready"
+              exit 0
+            fi
+
+            echo "Waiting for API... ($i)"
             sleep 1
           done
+
+          echo "❌ API did not become ready in time"
+          cat uvicorn.log
+          exit 1
       - name: Show API logs if failed
         if: failure()
         run: cat uvicorn.log

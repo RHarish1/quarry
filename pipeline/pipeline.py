@@ -58,7 +58,7 @@ async def execute_search_pipeline(
             response = copy.copy(cached)
             response.benchmark.cache_hit = True
             response.benchmark.cache_lookup_ms = benchmark.cache_lookup_ms
-
+            logger.info("Cache Hit!")
             return response
 
         logger.info("Cache Miss!")

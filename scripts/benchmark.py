@@ -1,9 +1,10 @@
 import asyncio
 import json
 import time
+import traceback
 from random import uniform
 from statistics import mean
-import traceback
+
 import httpx
 
 API_URL = "http://localhost:8000/search"
