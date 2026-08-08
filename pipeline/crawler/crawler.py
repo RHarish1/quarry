@@ -79,13 +79,16 @@ async def _crawl_search_result(
     search_result: SearchResult,
     crawl_request: CrawlRequest,
     manager: ExtractorManager,
+    mode: str,
 ) -> Document:
     """Fetch and extract a single search hit into a raw document."""
 
     crawl_started = perf_counter()
     try:
         raw_document = await fetch_raw_document(
-            search_result, timeout_seconds=crawl_request.timeout_seconds
+            search_result,
+            timeout_seconds=crawl_request.timeout_seconds,
+            mode=mode,
         )
     except Exception as exc:
         logger.exception("crawler.fetch_failed", extra={"url": search_result.url})
@@ -106,7 +109,7 @@ async def _crawl_search_result(
     return document
 
 
-async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
+async def crawl_documents(crawl_request: CrawlRequest, mode: str) -> Documents:
     """Crawl search results into raw documents, skipping failures gracefully."""
 
     if not crawl_request.search_results.results:
@@ -125,7 +128,9 @@ async def crawl_documents(crawl_request: CrawlRequest) -> Documents:
 
     async def guarded_crawl(search_result: SearchResult) -> Document:
         async with semaphore:
-            return await _crawl_search_result(search_result, crawl_request, manager)
+            return await _crawl_search_result(
+                search_result, crawl_request, manager, mode=mode
+            )
 
     documents = await asyncio.gather(
         *(

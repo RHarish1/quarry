@@ -19,6 +19,7 @@ async def rank_documents(
     target_documents: int,
     crawl_request: CrawlRequest,
     benchmark: SearchBenchmark | None = None,
+    mode: str = "production",
 ) -> Documents:
     """
     Produce a fixed number of high-quality documents.
@@ -63,7 +64,7 @@ async def rank_documents(
             update={"search_results": SearchResults(results=batch)}
         )
 
-        crawled_documents = await crawl_documents(batch_request)
+        crawled_documents = await crawl_documents(batch_request, mode)
 
         for document in crawled_documents.documents:
             score = float(document.metadata.get("quality_score", 0.0))
@@ -87,6 +88,6 @@ async def rank_documents(
         reverse=True,
     )
     if benchmark:
-        benchmark.pages_crawled = target_documents
+        benchmark.pages_successfully_crawled = target_documents
         benchmark.crawl_failures = current_index - target_documents + 1
     return Documents(documents=accepted_documents[:target_documents])
