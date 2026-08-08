@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing_extensions import deprecated
+
 from models.search import SearchResult
 
 
+@deprecated("Doesn't work well in async")
 def needs_recall(
     *,
     accepted: int,
@@ -22,6 +25,7 @@ def needs_recall(
     return accepted < requested and remaining > 0
 
 
+@deprecated("Not required in async")
 def select_recall_candidates(
     candidates: list[SearchResult],
     *,
@@ -48,6 +52,7 @@ def select_recall_candidates(
     return candidates[start:end]
 
 
+@deprecated("Not required in async")
 def remaining_candidates(
     candidates: list[SearchResult],
     *,
@@ -60,6 +65,7 @@ def remaining_candidates(
     return max(0, len(candidates) - current_index)
 
 
+@deprecated("Not required in async")
 def exhausted(
     candidates: list[SearchResult],
     *,

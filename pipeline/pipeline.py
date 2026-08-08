@@ -20,7 +20,7 @@ from pipeline.cleaning.cleaner import clean_documents
 from pipeline.compression.compressor import compress_documents
 from pipeline.crawler.crawler import crawl_documents
 from pipeline.query.normalizer import normalize_query
-from pipeline.ranking.manager import rank_documents
+from pipeline.ranking.manager import crawl_and_rank_documents
 from pipeline.retrieval import search_searxng, search_tavily
 
 from .cache import get_cache, make_cache_key, set_cache
@@ -138,7 +138,7 @@ async def execute_search_pipeline(
         )
 
         if request.rank_and_score_deterministically and request.crawl_websites:
-            crawled_documents = await rank_documents(
+            crawled_documents = await crawl_and_rank_documents(
                 search_results,
                 target_documents=request.target_documents,
                 crawl_request=crawl_request,

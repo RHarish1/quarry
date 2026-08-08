@@ -45,13 +45,11 @@ def test_rank_documents_uses_extraction_confidence(monkeypatch) -> None:
     ) -> Documents:
         urls = [result.url for result in crawl_request.search_results.results]
 
-        if urls == ["https://example.com/1", "https://example.com/2"]:
-            return Documents(
-                documents=[
-                    _make_document("https://example.com/1", 0.70),
-                    _make_document("https://example.com/2", 0.20),
-                ]
-            )
+        if urls == ["https://example.com/1"]:
+            return Documents(documents=[_make_document("https://example.com/1", 0.70)])
+
+        if urls == ["https://example.com/2"]:
+            return Documents(documents=[_make_document("https://example.com/2", 0.20)])
 
         if urls == ["https://example.com/3"]:
             return Documents(documents=[_make_document("https://example.com/3", 0.95)])
@@ -75,7 +73,7 @@ def test_rank_documents_uses_extraction_confidence(monkeypatch) -> None:
     )
 
     ranked = asyncio.run(
-        ranking_manager.rank_documents(
+        ranking_manager.crawl_and_rank_documents(
             search_results,
             target_documents=2,
             crawl_request=crawl_request,
@@ -103,7 +101,7 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
             ]
         )
 
-    async def fake_rank_documents(
+    async def fake_crawl_and_rank_documents(
         search_results,
         *,
         target_documents,
@@ -135,7 +133,9 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
         return documents, 12.5
 
     monkeypatch.setattr(pipeline_module, "search_searxng", fake_search_searxng)
-    monkeypatch.setattr(pipeline_module, "rank_documents", fake_rank_documents)
+    monkeypatch.setattr(
+        pipeline_module, "crawl_and_rank_documents", fake_crawl_and_rank_documents
+    )
     monkeypatch.setattr(pipeline_module, "clean_documents", fake_clean_documents)
     monkeypatch.setattr(pipeline_module, "compress_documents", fake_compress_documents)
 

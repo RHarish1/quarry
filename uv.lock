@@ -855,6 +855,7 @@ dependencies = [
     { name = "readability-lxml" },
     { name = "redis" },
     { name = "trafilatura" },
+    { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -880,6 +881,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0,<6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6,<1.0" },
     { name = "trafilatura", specifier = ">=1.9,<2.0" },
+    { name = "typing-extensions", specifier = ">=4.16.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1.0" },
 ]
 provides-extras = ["dev"]
