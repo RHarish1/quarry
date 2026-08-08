@@ -5,6 +5,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual run trigger'
+        required: false
+        default: 'Manual test'
 
 jobs:
   benchmark:
@@ -13,6 +19,7 @@ jobs:
     env:
       REDIS_URL: redis://localhost:6379/0
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      SEARXNG_URL: http://localhost:8080
 
     services:
       redis:
@@ -20,13 +27,17 @@ jobs:
         ports:
           - 6379:6379
 
-      searxng:
-        image: searxng/searxng:latest
-        ports:
-          - 8080:8080
-
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start SearXNG with custom config
+        run: |
+          # ✅ Start SearXNG after checkout so we can mount settings.yml
+          docker run -d \
+            --name searxng \
+            -p 8080:8080 \
+            -v ${{ github.workspace }}/searxng/settings.yml:/etc/searxng/settings.yml \
+            searxng/searxng:latest
 
       - uses: astral-sh/setup-uv@v5
 
@@ -36,10 +47,10 @@ jobs:
 
       - name: Install deps
         run: uv sync --locked
+
       - name: Wait for SearXNG
         run: |
           for i in {1..60}; do
-            # Check JSON endpoint specifically (important)
             if curl -sf http://localhost:8080 > /dev/null; then
               echo "✅ SearXNG ready"
               exit 0
@@ -47,11 +58,13 @@ jobs:
             echo "Waiting for SearXNG... ($i)"
             sleep 1
           done
-
+          
           echo "❌ SearXNG not ready"
+          
       - name: Debug SearXNG response
         run: |
-          curl "http://localhost:8080/search?q=python&format=json" | head -c 1000
+          curl -s "http://localhost:8080/search?q=python&format=json" | head -c 1000
+
       - name: Start API
         run: |
           set -e
@@ -83,6 +96,7 @@ jobs:
           echo "❌ API did not become ready in time"
           cat uvicorn.log
           exit 1
+          
       - name: Show API logs if failed
         if: failure()
         run: cat uvicorn.log
@@ -92,5 +106,3 @@ jobs:
 
       - name: Show API logs
         run: cat uvicorn.log
-
-      
