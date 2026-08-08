@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi_limiter import FastAPILimiter
-
+from prometheus_fastapi_instrumentator import Instrumentator
 from api.routes.search import router as search_router
 from config.logging import configure_logging
 from pipeline.cache import close_redis, get_redis
@@ -51,7 +51,7 @@ app = FastAPI(
         "returns cleaned Markdown documents. Open the **Search** endpoint for "
         "field-by-field behavior and a ready-to-run example."
     ),
-    version="0.6.0",
+    version="0.7.0",
     openapi_tags=[
         {
             "name": "Search",
@@ -64,7 +64,8 @@ app = FastAPI(
     ],
     lifespan=lifespan,
 )
-
+# Initialize and instrument the FastAPI application
+Instrumentator().instrument(app).expose(app)
 
 @app.get("/", tags=["System"], summary="Get service metadata")
 async def root() -> dict[str, str]:

@@ -7,7 +7,7 @@ services:
       - .env
     environment:
       APP_ENV: development
-      SEARXNG_BASE_URL: http://localhost:8080
+      SEARXNG_BASE_URL: http://searxng:8080
       SEARXNG_TIMEOUT_SECONDS: 20
       CRAWL_TIMEOUT_SECONDS: 15
       CRAWL_MAX_CONCURRENCY: 5
@@ -20,7 +20,6 @@ services:
       redis:
         condition: service_started
     restart: unless-stopped
-
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())" ]
       interval: 10s
@@ -40,7 +39,6 @@ services:
     volumes:
       - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
     restart: unless-stopped
-
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/').status)" ]
       interval: 10s
@@ -52,9 +50,34 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
-
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=quarry_admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

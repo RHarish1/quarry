@@ -2,19 +2,23 @@
 
 import logging
 from uuid import uuid4
+from time import perf_counter
 
 from fastapi import APIRouter, Request
-
-request_id = str(uuid4())
-from time import perf_counter
 
 from api.middleware import DEFAULT_RATE_LIMIT
 from models.search import SearchBenchmark, SearchRequest, SearchResponse, SearchTimings
 from pipeline.pipeline import execute_search_pipeline
 
+# Your custom metrics
+from api.metrics import (
+    SEARCH_CACHE_HITS, CACHE_LOOKUP_MS, URLS_FOUND, 
+    PAGES_CRAWLED, CRAWL_FAILURES, COMPRESSION_RATIO, TOKENS_SAVED
+)
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
+request_id = str(uuid4())
 
 @router.post(
     "/search",
@@ -31,21 +35,37 @@ router = APIRouter()
     ),
     response_description="A normalized response containing cleaned documents and stage timings.",
     responses={
-        200: {
-            "description": "Search completed, including empty partial-failure results."
-        },
+        200: {"description": "Search completed, including empty partial-failure results."},
         422: {"description": "The JSON request body did not match SearchRequest."},
-        429: {
-            "description": "The Redis-backed limit of 30 requests per minute was exceeded."
-        },
+        429: {"description": "The Redis-backed limit of 30 requests per minute was exceeded."},
     },
 )
 async def search(req: Request, body: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
     start = perf_counter()
     mode = req.headers.get("x-mode", "production")
+    
     try:
-        return await execute_search_pipeline(body, request_id, mode)
+        # 1. Capture the response instead of returning it immediately
+        response = await execute_search_pipeline(body, request_id, mode)
+        benchmark = response.benchmark
+
+        # 2. --- POPULATE PROMETHEUS METRICS ---
+        if benchmark.cache_hit:
+            SEARCH_CACHE_HITS.inc()
+            
+        URLS_FOUND.inc(benchmark.urls_found)
+        PAGES_CRAWLED.inc(benchmark.pages_successfully_crawled)
+        CRAWL_FAILURES.inc(benchmark.crawl_failures)
+        
+        tokens_saved = benchmark.tokens_before - benchmark.tokens_after
+        TOKENS_SAVED.inc(tokens_saved)
+
+        CACHE_LOOKUP_MS.observe(benchmark.cache_lookup_ms)
+        COMPRESSION_RATIO.observe(benchmark.compression_ratio)
+
+        # 3. Return the response to the user
+        return response
 
     except Exception:  # noqa: BLE001
         total_latency = (perf_counter() - start) * 1000
