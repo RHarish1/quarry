@@ -17,8 +17,10 @@ fields when supplied:
 | `time_range` | `time_range` |
 | `engines` | `engines`, comma-separated |
 
-The upstream timeout is configured with `SEARXNG_TIMEOUT_SECONDS` (20 seconds
-by default).
+Requests use the startup-created shared HTTP client. Its default timeout is 30
+seconds, while `SEARXNG_TIMEOUT_SECONDS` remains the configured retrieval
+timeout setting. The client follows redirects and sends the configured
+`QuarryBot/0.3` user agent.
 
 ## Normalization
 
@@ -28,6 +30,9 @@ Malformed items are skipped, and a payload without a list-valued `results`
 field produces an empty result list.
 
 Connection failures, timeouts, non-success upstream responses, and non-JSON
-payloads are represented as HTTP 502 errors inside the retrieval client. The
-top-level pipeline catches that exception and returns an empty response with
-the measured search latency instead of propagating it to the API caller.
+payloads are represented as HTTP 502 errors inside the retrieval client. Calls
+are wrapped in the SearXNG retry policy (up to three retries after the initial
+attempt for configured transient failures) and a circuit breaker that opens
+after five failures for 20 seconds. The top-level pipeline catches a final
+failure and returns an empty response with the measured search latency instead
+of propagating it to the API caller.

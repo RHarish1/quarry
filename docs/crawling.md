@@ -36,6 +36,20 @@ information, and safe extraction metadata needed by the cleaning stage. Its
 HTML and HTTP status are kept only in the internal `RawDocument`; API responses
 set `html` to `null`.
 
+All external fetching uses a shared asynchronous HTTPX client created during
+application startup. It follows redirects, sends `QuarryBot/0.3` as the default
+user agent, uses a 30-second default HTTP timeout, and permits up to 100 open
+connections (20 keep-alive connections).
+
+### Ranked crawling and robots.txt
+
+Robots checks happen only for ranked crawling—when both `crawl_websites` and
+`rank_and_score_deterministically` are true. Quarry fetches and caches each
+origin's `robots.txt`, then removes URLs the configured user agent cannot fetch.
+A missing `robots.txt` permits crawling; an error retrieving or parsing it
+causes Quarry to skip that origin conservatively. Candidate filtering then
+removes duplicate, blocked, and clearly non-content URLs before crawling starts.
+
 ## Failure Handling
 
 A timeout, HTTP client error, render failure, or extraction failure produces a

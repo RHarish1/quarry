@@ -17,20 +17,23 @@ shutdown.
 Keys have the form `search:<sha256>`. The digest is generated from the request
 after:
 
-- removing `enable_caching` and `format`;
+- removing `enable_caching`;
 - lowercasing and collapsing whitespace in `query`; and
 - sorting `engines` and `categories`.
 
 This makes semantically equivalent query spelling and filter order share an
-entry. All remaining request fields participate in the key, including fields
-that are currently not used by later pipeline stages.
+entry. All remaining request fields participate in the key.
 
 ## Reads and Writes
 
-The pipeline checks Redis before retrieval. A hit is deserialized directly into
-a `SearchResponse` and bypasses retrieval, crawling, and cleaning. On a miss,
-the completed response is stored only if it contains at least one document.
+The pipeline checks Redis after optional query normalization and before
+retrieval. A hit is deserialized directly into a `SearchResponse` and bypasses
+retrieval, crawling, cleaning, and compression. On a miss, the completed
+response is stored only if it contains at least one document.
 
 Entries expire after 3,600 seconds (one hour). Redis failures are not handled
-inside the cache helper. The route-level exception handler then returns an
-empty `SearchResponse` with zero timings rather than an HTTP error.
+inside the cache helper. Reads, writes, and deletes use up to two retries after
+the initial attempt for configured transient failures and pass through a Redis
+circuit breaker. That breaker opens after 10 failures for 10 seconds. A final
+cache failure reaches the route-level exception handler, which returns an empty
+`SearchResponse` with zero timings rather than an HTTP error.

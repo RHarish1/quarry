@@ -4,7 +4,9 @@
 
 # Quarry
 
-Quarry is an LLM-native retrieval backend. It accepts a search query, retrieves candidate URLs via SearXNG, fetches and parses the matching pages over HTTP, deterministically cleans the markdown, and returns structured results through a REST API.
+Quarry is an LLM-native retrieval backend. It searches SearXNG, optionally
+crawls and ranks candidate pages, then returns cleaned and optionally compressed
+Markdown through a REST API.
 
 ## Architecture
 
@@ -13,15 +15,16 @@ flowchart TD
   Client([Client]) --> API[POST /search]
   API --> Limit{Within 30 requests/minute?}
   Limit -->|No| Throttle[429 response]
-  Limit -->|Yes| Cache{Caching enabled and hit?}
+  Limit -->|Yes| Normalize[Optional query normalization]
+  Normalize --> Cache{Caching enabled and hit?}
   Cache -->|Yes| Cached[Return cached SearchResponse]
-  Cache -->|No| Normalize[Optional query normalization]
-  Normalize --> Retrieve[SearXNG retrieval]
+  Cache -->|No| Retrieve[SearXNG retrieval]
   Retrieve --> Crawl{crawl_websites?}
   Crawl -->|No| Snippets[Use SearXNG snippets]
   Crawl -->|Yes| Rank{Deterministic ranking?}
   Rank -->|No| All[Fetch and extract all candidates]
-  Rank -->|Yes| Filter[Filter candidates]
+  Rank -->|Yes| Robots[Check robots.txt]
+  Robots --> Filter[Filter candidates]
   Filter --> Batch[Crawl next candidate batch]
   Batch --> Target{Enough qualified documents?}
   Target -->|No, candidates remain| Batch
@@ -91,6 +94,7 @@ It is therefore not a Quarry configuration variable.
 
 `POST /search` returns:
 
+- `request_id`
 - `query`
 - `timings`
 - `documents`
@@ -99,6 +103,9 @@ Each document is a `CleanDocument` that preserves the raw document fields and ad
 
 `SearchResponse.timings` reports search, crawl, cleaning, optional compression,
 and total pipeline latency in milliseconds.
+
+Each API process assigns one UUID request identifier at startup. It is returned
+as `request_id` on responses from that process.
 
 ## Development Setup
 
@@ -135,6 +142,8 @@ The processing pipeline is documented stage by stage:
 - [Cleaning](docs/cleaning.md): deterministic Markdown transformations and metrics.
 - [Compression](docs/compression.md): optional token-budgeted output reduction.
 - [Caching](docs/caching.md): Redis lifecycle, key construction, and expiration.
+- [Resilience and observability](docs/resilience-observability.md): shared HTTP
+  lifecycle, retries, circuit breakers, graceful shutdown, and internal metrics.
 
 ## Project Layout
 
@@ -143,7 +152,6 @@ The processing pipeline is documented stage by stage:
 - `pipeline/`: retrieval pipeline packages
 - `models/`: shared data models
 - `utils/`: shared utilities
-- `benchmarks/`: benchmark scaffolding
-- `tests/`: test scaffolding
-- `scripts/`: helper scripts
+- `tests/`: unit, integration, and dataset-based test resources
+- `scripts/`: helper scripts, including benchmark tooling
 - `docs/`: project documentation

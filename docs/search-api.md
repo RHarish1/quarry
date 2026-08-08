@@ -16,6 +16,8 @@ seconds using Redis.
   "compress_output": true,
   "target_token_budget": 2048,
   "target_documents": 10,
+  "enhance_query": true,
+  "rank_and_score_deterministically": true,
   "language": "en",
   "engines": ["google"],
   "categories": ["general"]
@@ -38,7 +40,6 @@ seconds using Redis.
 | `language` | `null` | Search language. |
 | `engines` | `[]` | Search-engine filters. |
 | `categories` | `[]` | SearXNG category filters. |
-| `format` | `json` | Accepted by the schema; retrieval always requests JSON from SearXNG. |
 
 ## Example
 
@@ -50,7 +51,8 @@ curl -X POST http://localhost:8000/search \
 
 ## Response Shape
 
-- `query`: the original search query
+- `query`: the effective search query (normalized when `enhance_query` is true)
+- `request_id`: UUID assigned to the API process that handled the request
 - `timings`: search, crawl, cleaning, compression, and total pipeline latency
   in milliseconds
 - `documents`: a list of `CleanDocument` objects
@@ -71,10 +73,13 @@ Each `CleanDocument` preserves the raw crawled fields and adds:
 - `crawl_latency_ms` (including deterministic ranking when enabled)
 - `cleaning_latency_ms`
 - `compression_latency_ms` (`0.0` when compression is disabled or an earlier stage fails)
-- `total_request_latency_ms` (wall-clock pipeline time, including compression)
+- `total_request_latency_ms` (retrieval-to-compression wall-clock pipeline time)
 
 If a pipeline stage fails, the endpoint returns a successful response with the
-original query, recorded timings, and an empty `documents` list.
+effective query, recorded timings, and an empty `documents` list.
+
+The endpoint returns HTTP `429` after 30 requests in 60 seconds, and HTTP `422`
+for an invalid request body. Redis must be available for rate limiting.
 
 For the full lifecycle and stage fallback behavior, see the
 [request-flow guide](request-flow.md).

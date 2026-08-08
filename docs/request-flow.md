@@ -9,6 +9,7 @@ sequenceDiagram
   participant C as Client
   participant A as FastAPI
   participant R as Redis
+  participant H as Shared HTTP client
   participant S as SearXNG
   participant X as Extractor manager
   participant D as Deterministic cleaner
@@ -16,15 +17,19 @@ sequenceDiagram
 
   C->>A: POST /search
   A->>R: Rate-limit check (30 requests / 60 seconds)
+  opt enhance_query is true
+    A->>A: Normalize query text
+  end
   alt enable_caching is true
     A->>R: Read normalized request cache key
     R-->>A: Cached SearchResponse, if present
   end
-  opt enhance_query is true
-    A->>A: Normalize query text
-  end
-  A->>S: POST /search (form-encoded query and filters)
+  A->>H: Reuse startup-created HTTP client
+  H->>S: POST /search (form-encoded query and filters)
   S-->>A: Candidate URLs and snippets
+  opt ranked crawling is enabled
+    A->>H: Fetch and cache robots.txt per origin
+  end
   opt crawl_websites is true
     A->>X: Fetch each candidate concurrently
     X-->>A: Extracted Markdown documents
@@ -48,6 +53,10 @@ asynchronous Redis client from `REDIS_URL` and gives it to `fastapi-limiter`.
 The client is closed on shutdown. Redis must therefore be reachable even when
 response caching is disabled, because the `/search` rate limit depends on it.
 
+The same lifespan hook creates one shared HTTPX client for SearXNG, robots.txt,
+and page requests. On shutdown, Quarry cancels registered background tasks,
+closes that client, then closes Redis.
+
 ## 2. API Validation and Rate Limiting
 
 `POST /search` validates its JSON body as `SearchRequest`. The `query` field is
@@ -58,8 +67,8 @@ limiter.
 ## 3. Optional Response Cache
 
 When `enable_caching` is `true`, the pipeline builds a `search:<sha256>` key.
-It excludes `enable_caching` and `format`, normalizes query whitespace and
-case, and sorts engine/category filters. A cache hit returns the stored
+It excludes `enable_caching`, normalizes query whitespace and case, and sorts
+engine/category filters. A cache hit returns the stored
 `SearchResponse` immediately; SearXNG, crawling, and cleaning do not run.
 
 Only completed responses with at least one document are cached. Entries use a
@@ -120,6 +129,10 @@ blocked domains, common static-file extensions, and paths such as login,
 privacy, cookie, terms, feeds, tags, and categories. This filtering only occurs
 in ranked mode; normal crawling attempts every SearXNG result.
 
+Before ranked candidate filtering, Quarry checks robots.txt for each origin.
+Missing robots files allow crawling; unavailable or invalid robots files cause a
+conservative skip. Normal crawling does not make robots checks.
+
 ## 6. Cleaning and Metrics
 
 Every document is converted to a `CleanDocument`. Level `0` normalizes
@@ -141,10 +154,24 @@ If compression fails, Quarry returns the cleaned documents instead.
 
 See [Compression](compression.md) for details.
 
-## 8. Response, Timings, and Errors
+## 8. Resilience
 
-The response contains the original query, separate search/crawl/cleaning/total
-latencies, optional compression latency, and cleaned documents. The total is
+SearXNG, page fetching, robots.txt, and Redis operations use retry policies and
+per-dependency circuit breakers. Retries use exponential backoff with jitter for
+configured transient connection and timeout failures. A circuit opens after its
+failure threshold, rejects work during its recovery timeout, then allows one
+half-open probe before closing again on success.
+
+These protections can turn an upstream outage into an earlier empty pipeline
+response rather than allowing repeated requests to continue calling the failed
+dependency. See [Resilience and observability](resilience-observability.md) for
+policy details.
+
+## 9. Response, Timings, and Errors
+
+The response contains the process `request_id`, the normalized query, separate
+search/crawl/cleaning/total latencies, optional compression latency, and cleaned
+documents. The total is
 measured after the optional compression stage. A failure in retrieval, crawling,
 or cleaning stops later stages and returns an empty document list with timings
 for the work that completed; compression latency is then `0.0`. If compression
@@ -163,6 +190,11 @@ The application reads only these environment variables at startup:
 | `CRAWL_TIMEOUT_SECONDS` | `30` | HTTP crawling timeout |
 | `CRAWL_MAX_CONCURRENCY` | `4` | Crawl semaphore |
 | `REDIS_URL` | `redis://redis:6379/0` | Rate limiter and cache |
+
+The shared HTTP client also uses fixed application settings: user agent
+`QuarryBot/0.3`, 30-second timeout, 100 maximum connections, and 20 maximum
+keep-alive connections. These are currently code defaults rather than
+environment variables.
 
 Quarry does not call `load_dotenv`, so there is intentionally no `.env.example`.
 For local runs, export the variables or use your process runner's environment
