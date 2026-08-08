@@ -31,14 +31,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start SearXNG with custom config
-              run: |
-                chmod 644 ${{ github.workspace }}/searxng/settings.yml
+        run: |
+          chmod 644 ${{ github.workspace }}/searxng/settings.yml
 
-                docker run -d \
-                  --name searxng \
-                  -p 8080:8080 \
-                  -v ${{ github.workspace }}/searxng/settings.yml:/etc/searxng/settings.yml \
-                  searxng/searxng:latest
+          docker run -d \
+            --name searxng \
+            -p 8080:8080 \
+            -v ${{ github.workspace }}/searxng/settings.yml:/etc/searxng/settings.yml \
+            searxng/searxng:latest
 
       - name: Verify Tavily API Key Presence & Direct Test
         run: |

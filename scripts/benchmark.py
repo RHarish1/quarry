@@ -119,9 +119,14 @@ def summarize(results):
         "p99": percentile(latencies, 0.99),
         "cache_hit_rate": cache_hits / len(benchmarks) if benchmarks else 0,
         "avg_token_reduction_pct": (
-        (sum((b - a) / b for b, a in zip(tokens_before, tokens_after) if b > 0) / len(tokens_before) * 100)
-        if tokens_before else 0
-    ),
+            (
+                sum((b - a) / b for b, a in zip(tokens_before, tokens_after) if b > 0)
+                / len(tokens_before)
+                * 100
+            )
+            if tokens_before
+            else 0
+        ),
     }
 
 
