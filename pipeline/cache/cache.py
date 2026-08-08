@@ -1,6 +1,7 @@
 from models.search import SearchResponse
-
+import logging
 from .redis import get_redis
+logger = logging.getLogger(__name__)
 
 DEFAULT_TTL_SECONDS = 3600
 
@@ -22,9 +23,12 @@ async def get_cache(
 ) -> SearchResponse | None:
     redis = get_redis()
 
+    async def op():
+        return await redis.get(key)
+    
     value = await REDIS_BREAKER.execute(
         lambda: retry(
-            lambda: redis.get(key),
+            op,
             provider="Redis",
             policy=REDIS_RETRY,
         )
@@ -58,10 +62,11 @@ async def set_cache(
 
 async def delete(key: str) -> None:
     redis = get_redis()
-
+    async def op():
+        return await redis.get(key)
     await REDIS_BREAKER.execute(
         lambda: retry(
-            lambda: redis.delete(key),
+            op,
             provider="Redis",
             policy=REDIS_RETRY,
         )
