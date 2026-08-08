@@ -3,12 +3,13 @@
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 request_id = str(uuid4())
+from time import perf_counter
 
 from api.middleware import DEFAULT_RATE_LIMIT
-from models.search import SearchRequest, SearchResponse, SearchTimings
+from models.search import SearchBenchmark, SearchRequest, SearchResponse, SearchTimings
 from pipeline.pipeline import execute_search_pipeline
 
 logger = logging.getLogger(__name__)
