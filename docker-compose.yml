@@ -3,9 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - .env
     environment:
       APP_ENV: development
-      SEARXNG_BASE_URL: http://searxng:8080
+      SEARXNG_BASE_URL: http://localhost:8080
       SEARXNG_TIMEOUT_SECONDS: 20
       CRAWL_TIMEOUT_SECONDS: 30
       CRAWL_MAX_CONCURRENCY: 4
@@ -14,7 +16,7 @@ services:
       - "8000:8000"
     depends_on:
       searxng:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_started
     restart: unless-stopped

@@ -4,12 +4,33 @@ search:
   formats:
     - html
     - json
-    - csv
-    - rss
 
 server:
   bind_address: 0.0.0.0
   port: 8080
   base_url: http://localhost:8080/
   secret_key: "change-me"
-  image_proxy: true
+
+outgoing:
+  request_timeout: 1.0   # 🔥 kill 3s latency
+  useragent_suffix: "Mozilla/5.0"
+  max_request_timeout: 2.0
+
+engines:
+  - name: wikipedia
+    disabled: false
+
+  - name: duckduckgo
+    disabled: false
+
+  - name: brave
+    disabled: true
+
+  - name: startpage
+    disabled: true
+
+  - name: google
+    disabled: true
+
+  - name: qwant
+    disabled: false
