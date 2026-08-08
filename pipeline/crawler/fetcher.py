@@ -22,10 +22,30 @@ CRAWLER_BREAKER = CircuitBreaker(
 )
 
 
+def _get_headers(mode: str = "production") -> dict[str, str]:
+    base_headers = {
+        "Accept": (
+            "text/html," "application/xhtml+xml," "application/xml;q=0.9," "*/*;q=0.8"
+        )
+    }
+
+    if mode == "benchmark":
+        base_headers["User-Agent"] = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    else:
+        base_headers["User-Agent"] = "QuarryBot/1.0"
+
+    return base_headers
+
+
 async def fetch_raw_document(
     search_result: SearchResult,
     *,
     timeout_seconds: float,
+    mode: str,
 ) -> RawDocument:
     """Fetch a webpage with retry and circuit breaker protection."""
 
@@ -34,6 +54,7 @@ async def fetch_raw_document(
             lambda: _fetch_raw_document(
                 search_result,
                 timeout_seconds=timeout_seconds,
+                mode=mode,
             ),
             provider="Crawler",
             policy=CRAWLER_RETRY,
@@ -45,6 +66,7 @@ async def _fetch_raw_document(
     search_result: SearchResult,
     *,
     timeout_seconds: float,
+    mode: str,
 ) -> RawDocument:
     """Execute a single HTTP fetch."""
 
@@ -55,14 +77,7 @@ async def _fetch_raw_document(
     response = await client.get(
         search_result.url,
         timeout=timeout_seconds,
-        headers={
-            "Accept": (
-                "text/html,"
-                "application/xhtml+xml,"
-                "application/xml;q=0.9,"
-                "*/*;q=0.8"
-            )
-        },
+        headers=_get_headers(mode),
     )
 
     fetch_duration_ms = (perf_counter() - started) * 1000.0
