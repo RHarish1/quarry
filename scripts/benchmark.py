@@ -3,7 +3,7 @@ import json
 import time
 from random import uniform
 from statistics import mean
-
+import traceback
 import httpx
 
 API_URL = "http://localhost:8000/search"
@@ -65,6 +65,8 @@ async def run_single(client, query, config, mode="benchmark"):
         )
         res.raise_for_status()
         data = res.json()
+        print(res.status_code)
+        print(res.text[:500])
         total_ms = (time.perf_counter() - t0) * 1000
 
         return {
@@ -75,6 +77,7 @@ async def run_single(client, query, config, mode="benchmark"):
 
     except Exception as e:  # noqa: BLE001
         print(e)
+        traceback.print_exc()
         return {
             "success": False,
             "latency_ms": (time.perf_counter() - t0) * 1000,
@@ -125,7 +128,7 @@ def summarize(results):
 
 
 async def run_benchmark():
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=900) as client:
         for difficulty, file_path in QUERY_FILES.items():
             queries = load_queries(file_path)
 
