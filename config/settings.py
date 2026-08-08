@@ -15,15 +15,15 @@ class Settings:
         default_factory=lambda: float(os.getenv("SEARXNG_TIMEOUT_SECONDS", "20"))
     )
     crawl_timeout_seconds: float = field(
-        default_factory=lambda: float(os.getenv("CRAWL_TIMEOUT_SECONDS", "30"))
+        default_factory=lambda: float(os.getenv("CRAWL_TIMEOUT_SECONDS", "15"))
     )
     crawl_max_concurrency: int = field(
-        default_factory=lambda: int(os.getenv("CRAWL_MAX_CONCURRENCY", "4"))
+        default_factory=lambda: int(os.getenv("CRAWL_MAX_CONCURRENCY", "5"))
     )
     redis_url: str = field(
         default_factory=lambda: os.getenv("REDIS_URL", "redis://redis:6379/0")
     )
-    user_agent: str = "QuarryBot/0.3"
+    user_agent: str = "QuarryBot/0.6"
     http_timeout_seconds: float = 30.0
     http_max_connections: int = 100
     http_max_keepalive_connections: int = 20

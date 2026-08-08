@@ -143,8 +143,8 @@ class CrawlRequest(BaseModel):
     search_results: SearchResults
     crawl_websites: bool = False
     enable_caching: bool = False
-    timeout_seconds: float = 30.0
-    max_concurrency: int = 4
+    timeout_seconds: float = 20.0
+    max_concurrency: int = 5
 
 
 class SearchTimings(BaseModel):
