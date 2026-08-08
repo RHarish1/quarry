@@ -61,9 +61,10 @@ async def crawl_and_rank_documents(
 
                 # Fetch and extract
                 crawled_docs = await crawl_documents(single_request, mode)
-
+                doc = None
                 # Push the finished document to the results queue
-                doc = crawled_docs.documents[0] if crawled_docs.documents else None
+                if crawled_docs and getattr(crawled_docs, "documents", None):
+                    doc = crawled_docs.documents[0]
                 await result_queue.put(doc)
 
                 task_queue.task_done()
@@ -72,6 +73,7 @@ async def crawl_and_rank_documents(
             except Exception:  # noqa
                 # Ensure we don't dead-lock the orchestrator if a worker crashes
                 await result_queue.put(None)
+            finally:
                 task_queue.task_done()
 
     # 3. Spin up Workers (bounded by max_concurrency)
