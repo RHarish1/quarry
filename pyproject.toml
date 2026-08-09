@@ -21,6 +21,7 @@ dependencies = [
   "trafilatura>=1.9,<2.0",
   "typing-extensions>=4.16.0",
   "prometheus-fastapi-instrumentator>=8.1.0",
+  "duckduckgo-search>=8.1.1",
 ]
 
 [project.optional-dependencies]

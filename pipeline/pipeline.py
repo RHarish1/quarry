@@ -22,7 +22,12 @@ from pipeline.compression.compressor import compress_documents
 from pipeline.crawler.crawler import crawl_documents
 from pipeline.query.normalizer import normalize_query
 from pipeline.ranking.manager import crawl_and_rank_documents
-from pipeline.retrieval import search_searxng, search_tavily
+from pipeline.retrieval import (
+    search_brave,
+    search_duckduckgo,
+    search_searxng,
+    search_tavily,
+)
 
 from .cache import get_cache, make_cache_key, set_cache
 
@@ -75,13 +80,18 @@ async def execute_search_pipeline(
     errors = []
     tavily_results = SearchResults()
     searx_results = SearchResults()
+    brave_results = SearchResults()
+    ddg_results = SearchResults()
+    errors = []
 
+    # 1. Try Tavily First
     try:
         tavily_results = await search_tavily(request.query)
     except Exception:
         logger.exception("Tavily failed")
         errors.append("tavily")
 
+    # 2. Fallback to SearXNG
     if len(tavily_results.results) < request.target_documents * 2:
         try:
             searx_results = await search_searxng(request)
@@ -89,7 +99,35 @@ async def execute_search_pipeline(
             logger.exception("SearXNG failed")
             errors.append("searxng")
 
-    all_results = tavily_results.results + searx_results.results
+    # 3. Fallback to Brave
+    total_found = len(tavily_results.results) + len(searx_results.results)
+    if total_found < request.target_documents * 2:
+        try:
+            brave_results = await search_brave(request.query)
+        except Exception:
+            logger.exception("Brave Search failed")
+            errors.append("brave")
+
+    # 4. Fallback to DuckDuckGo (Ultimate Free Fallback)
+    total_found = (
+        len(tavily_results.results)
+        + len(searx_results.results)
+        + len(brave_results.results)
+    )
+    if total_found < request.target_documents * 2:
+        try:
+            ddg_results = await search_duckduckgo(request.query)
+        except Exception:
+            logger.exception("DuckDuckGo Search failed")
+            errors.append("duckduckgo")
+
+    # 5. Combine everything
+    all_results = (
+        tavily_results.results
+        + searx_results.results
+        + brave_results.results
+        + ddg_results.results
+    )
     seen = set()
     unique = []
 
