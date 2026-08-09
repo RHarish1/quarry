@@ -47,7 +47,7 @@ def test_compression_uses_requested_budget_and_records_the_step() -> None:
     )
     assert compressed.cleaned_token_count <= 13
     assert compressed.tokens_removed > 0
-    assert compressed.cleaning_steps_applied[-1] == "deterministic_compression"
+    assert compressed.cleaning_steps_applied[-1] == "markdown_minification"
 
 
 def test_compression_uses_the_default_budget_when_none_is_supplied() -> None:

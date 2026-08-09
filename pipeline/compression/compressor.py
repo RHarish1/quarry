@@ -43,6 +43,7 @@ def compress_documents(
 
     return CleanDocuments(documents=compressed_documents), latency_ms
 
+
 def _compress_document(
     document: CleanDocument,
     token_budget: int,
@@ -52,10 +53,10 @@ def _compress_document(
 
     paragraphs = _split_paragraphs(text)
     paragraphs = _remove_duplicate_paragraphs(paragraphs)
-    
+
     # 1. Prune high-density link blocks (hidden nav menus)
     paragraphs = _remove_low_information(paragraphs)
-    
+
     # 2. Minify remaining markdown (strip URLs, keep text)
     paragraphs = _minify_markdown(paragraphs)
 
@@ -78,7 +79,8 @@ def _compress_document(
                 else 0.0
             ),
             "cleaning_steps_applied": (
-                document.cleaning_steps_applied + ["deterministic_compression", "markdown_minification"]
+                document.cleaning_steps_applied
+                + ["deterministic_compression", "markdown_minification"]
             ),
         }
     )
@@ -105,6 +107,7 @@ def _remove_duplicate_paragraphs(
 
     return output
 
+
 def _remove_low_information(paragraphs: list[str]) -> list[str]:
     """Remove hidden nav menus and uselessly short paragraphs."""
     output: list[str] = []
@@ -114,7 +117,7 @@ def _remove_low_information(paragraphs: list[str]) -> list[str]:
         if len(paragraph) < 30 and not paragraph.startswith(("#", "-", "*")):
             continue
 
-        # Heuristic: If a paragraph is more than 40% hyperlink text, 
+        # Heuristic: If a paragraph is more than 40% hyperlink text,
         # it is almost certainly a navigation menu or tag cloud. Drop it.
         link_chars = sum(len(m.group(0)) for m in LINK_PATTERN.finditer(paragraph))
         if len(paragraph) > 0 and (link_chars / len(paragraph)) > 0.4:
@@ -147,6 +150,7 @@ def _truncate_to_budget(
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
+
 
 def _minify_markdown(paragraphs: list[str]) -> list[str]:
     """Flatten images to alt-text and links to standard text to save massive tokens."""
