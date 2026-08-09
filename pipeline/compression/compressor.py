@@ -8,6 +8,11 @@ from time import perf_counter
 from models.clean_document import CleanDocument, CleanDocuments
 
 logger = logging.getLogger(__name__)
+import re
+
+# Add these regex patterns near the top of compressor.py
+LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 
 DEFAULT_TOKEN_BUDGET = 2048
 CHARS_PER_TOKEN = 4
@@ -38,18 +43,21 @@ def compress_documents(
 
     return CleanDocuments(documents=compressed_documents), latency_ms
 
-
 def _compress_document(
     document: CleanDocument,
     token_budget: int,
 ) -> CleanDocument:
     """Compress a single cleaned document."""
-
     text = document.cleaned_markdown
 
     paragraphs = _split_paragraphs(text)
     paragraphs = _remove_duplicate_paragraphs(paragraphs)
+    
+    # 1. Prune high-density link blocks (hidden nav menus)
     paragraphs = _remove_low_information(paragraphs)
+    
+    # 2. Minify remaining markdown (strip URLs, keep text)
+    paragraphs = _minify_markdown(paragraphs)
 
     compressed = _truncate_to_budget(
         paragraphs,
@@ -63,17 +71,14 @@ def _compress_document(
         update={
             "cleaned_markdown": compressed,
             "cleaned_token_count": compressed_tokens,
-            "tokens_removed": max(
-                0,
-                original_tokens - compressed_tokens,
-            ),
+            "tokens_removed": max(0, original_tokens - compressed_tokens),
             "reduction_percentage": (
                 (max(0, original_tokens - compressed_tokens) / original_tokens) * 100
                 if original_tokens
                 else 0.0
             ),
             "cleaning_steps_applied": (
-                document.cleaning_steps_applied + ["deterministic_compression"]
+                document.cleaning_steps_applied + ["deterministic_compression", "markdown_minification"]
             ),
         }
     )
@@ -100,28 +105,19 @@ def _remove_duplicate_paragraphs(
 
     return output
 
-
-def _remove_low_information(
-    paragraphs: list[str],
-) -> list[str]:
+def _remove_low_information(paragraphs: list[str]) -> list[str]:
+    """Remove hidden nav menus and uselessly short paragraphs."""
     output: list[str] = []
 
     for paragraph in paragraphs:
-        lower = paragraph.lower()
-
-        if "cookie" in lower:
+        # Skip very short paragraphs unless they are list items or headings
+        if len(paragraph) < 30 and not paragraph.startswith(("#", "-", "*")):
             continue
 
-        if "privacy policy" in lower:
-            continue
-
-        if "accept all" in lower:
-            continue
-
-        if "advertisement" in lower:
-            continue
-
-        if len(paragraph) < 30:
+        # Heuristic: If a paragraph is more than 40% hyperlink text, 
+        # it is almost certainly a navigation menu or tag cloud. Drop it.
+        link_chars = sum(len(m.group(0)) for m in LINK_PATTERN.finditer(paragraph))
+        if len(paragraph) > 0 and (link_chars / len(paragraph)) > 0.4:
             continue
 
         output.append(paragraph)
@@ -151,3 +147,14 @@ def _truncate_to_budget(
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
+
+def _minify_markdown(paragraphs: list[str]) -> list[str]:
+    """Flatten images to alt-text and links to standard text to save massive tokens."""
+    output = []
+    for p in paragraphs:
+        # ![Alt Text](https://long-url.com/img.png) -> Alt Text
+        p = IMAGE_PATTERN.sub(r"\1", p)
+        # [Click Here](https://long-url.com/a/b/c) -> Click Here
+        p = LINK_PATTERN.sub(r"\1", p)
+        output.append(p)
+    return output
