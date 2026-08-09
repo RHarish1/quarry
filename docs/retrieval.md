@@ -1,13 +1,34 @@
 # Retrieval Stage
 
-The retrieval stage turns a `SearchRequest` into normalized `SearchResult`
-objects. Its implementation is in `pipeline/retrieval/searxng.py`.
+The retrieval stage turns a `SearchRequest` into a deduplicated list of `SearchResult`
+objects. Implemented in `pipeline/retrieval/` and orchestrated by `pipeline/pipeline.py`.
 
-## Request to SearXNG
+## Multi-Provider Fallback Chain
 
-Quarry sends a form-encoded `POST` request to `/search` on
-`SEARXNG_BASE_URL`. It always requests `format=json` and sends these request
-fields when supplied:
+Quarry uses a sequential fallback strategy. Providers are tried in order; each
+provider failure is caught and logged without aborting the chain.
+
+```
+1. Tavily       ── always attempted first
+        │
+        ▼ (if results < target_documents × 2)
+2. SearXNG      ── form-encoded POST to SEARXNG_BASE_URL/search
+        │
+        ▼ (if combined total < target_documents)
+3. Brave Search ── Brave Web Search API
+        │
+        ▼ (if combined total still < target_documents)
+4. DuckDuckGo   ── free DDGS client (ddgs library)
+```
+
+Results from all providers are concatenated. Duplicates are removed by URL
+(first-seen wins, insertion order preserved). If the combined total is zero
+after all providers, the pipeline returns an empty `SearchResponse`.
+
+## Provider: SearXNG
+
+When Quarry queries SearXNG it sends a form-encoded `POST` to
+`{SEARXNG_BASE_URL}/search` with `format=json` always set.
 
 | Quarry field | SearXNG parameter |
 | --- | --- |
@@ -17,22 +38,40 @@ fields when supplied:
 | `time_range` | `time_range` |
 | `engines` | `engines`, comma-separated |
 
-Requests use the startup-created shared HTTP client. Its default timeout is 30
-seconds, while `SEARXNG_TIMEOUT_SECONDS` remains the configured retrieval
-timeout setting. The client follows redirects and sends the configured
-`QuarryBot/0.3` user agent.
+All requests use the startup-created shared HTTPX client (30 s timeout,
+`QuarryBot/0.6` user agent, follows redirects).
 
-## Normalization
+## Result Normalisation
 
-Each item in SearXNG's `results` array becomes a `SearchResult` with `url`,
-`title`, and `content`. Every other upstream field is preserved in `metadata`.
-Malformed items are skipped, and a payload without a list-valued `results`
-field produces an empty result list.
+Each provider result is normalised into a `SearchResult`:
 
-Connection failures, timeouts, non-success upstream responses, and non-JSON
-payloads are represented as HTTP 502 errors inside the retrieval client. Calls
-are wrapped in the SearXNG retry policy (up to three retries after the initial
-attempt for configured transient failures) and a circuit breaker that opens
-after five failures for 20 seconds. The top-level pipeline catches a final
-failure and returns an empty response with the measured search latency instead
-of propagating it to the API caller.
+```python
+SearchResult(
+    url="https://...",
+    title="...",
+    content="...",   # snippet text
+    metadata={...},  # all extra provider fields preserved
+)
+```
+
+Malformed items (missing URL/title/content) are skipped silently. SearXNG
+responses that contain a non-list `results` field produce an empty result set.
+
+## Resilience
+
+SearXNG calls are wrapped in `SEARCH_PROVIDER_RETRY` (3 retries, 250 ms base,
+2 s max, exponential backoff + jitter) and `FAST_PROVIDER_BREAKER` (opens after
+5 failures, 20-second recovery). Other providers have analogous wrapping.
+
+Connection failures, timeouts, non-2xx responses, and JSON parse errors are
+represented as exceptions. They cause the provider to be skipped in the fallback
+chain rather than aborting the request.
+
+## robots.txt (`pipeline/retrieval/robots.py`)
+
+robots.txt is checked **only in ranked crawl mode** (`rank_and_score_deterministically=true`).
+Quarry fetches and caches each origin's `robots.txt` for `QuarryBot/0.6`:
+
+- **Missing file** → crawling allowed.
+- **Fetch or parse error** → origin skipped conservatively.
+- **Disallowed path** → URL removed before crawling begins.

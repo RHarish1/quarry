@@ -1,58 +1,120 @@
 # Crawling Stage
 
 The crawling stage converts `SearchResult` objects into raw `Document` objects.
-Its public entrypoint is `pipeline/crawler/crawler.py`, while the internal
-implementation is split across `pipeline/crawler/fetcher.py`,
-`pipeline/crawler/manager.py`, `pipeline/crawler/quality.py`, and
-`pipeline/crawler/extractors/`.
+Entry point: `pipeline/crawler/crawler.py`. Internal implementation is split
+across `fetcher.py`, `manager.py`, `quality.py`, and `extractors/`.
 
-## Disabled Crawling
+## Disabled Crawling (`crawl_websites=false`)
 
-`crawl_websites` defaults to `false`. In this mode no page is fetched: the
-search result's snippet becomes `Document.markdown`, `crawl_status` is
-`skipped`, and the document metadata records `source: search_provider`.
+No page is fetched. Each search snippet becomes a `Document` with:
 
-## Fetch and Extract
+- `markdown` = snippet text from the search provider
+- `crawl_status` = `"skipped"`
+- `metadata.source` = `"search_provider"`
 
-When `crawl_websites` is true, Quarry runs a deterministic fetch/extract
-pipeline:
+## Fetch and Extract (`crawl_websites=true`)
 
-1. HTTPX fetches the raw HTML and stores it in an internal `RawDocument`.
-2. Trafilatura extracts article content directly from the raw HTML.
-3. If the quality score is still low, Playwright renders the page and runs
-   Trafilatura again.
-4. If the page still does not meet the quality threshold, readability-lxml
-   converts the article into Markdown as the final fallback.
+A `asyncio.Semaphore` (size = `CRAWL_MAX_CONCURRENCY`) bounds concurrent
+fetches. Each URL is processed by `_crawl_search_result`:
 
-The extractor manager evaluates each result with deterministic thresholds for
-text length, word count, paragraph count, content-to-HTML ratio, link density,
-and navigation ratio. The raw HTML is retained only internally. The downstream
-`Document` keeps `html=None` so the API never returns page markup.
+1. **Fetch** — `fetcher.py` uses the shared HTTPX client to download the raw
+   HTML. Stores response in an internal `RawDocument` (never exposed in the API
+   response — `Document.html` is always `null`).
+2. **Extract** — `ExtractorManager.extract()` runs the waterfall below.
+3. **Fallback** — any exception produces a `Document` with `crawl_status`
+   `"fetch_failed"` or `"extract_failed"` and the original snippet as content.
 
-The public `Document` preserves the final URL, content type, timing
-information, and safe extraction metadata needed by the cleaning stage. Its
-`crawl_status` is the extractor method that produced the result
-(`trafilatura`, `playwright_trafilatura`, or `readability`). The raw response
-HTML and HTTP status are kept only in the internal `RawDocument`; API responses
-set `html` to `null`.
+### Extractor Waterfall
 
-All external fetching uses a shared asynchronous HTTPX client created during
-application startup. It follows redirects, sends `QuarryBot/0.3` as the default
-user agent, uses a 30-second default HTTP timeout, and permits up to 100 open
-connections (20 keep-alive connections).
+`ExtractorManager` tries extractors in order and stops at the first one whose
+quality score meets the acceptance threshold (`minimum_score = 0.68`):
 
-### Ranked crawling and robots.txt
+| Priority | Extractor | Method |
+| --- | --- | --- |
+| 1 | `TrafilaturaExtractor` | Article extraction directly on raw HTML |
+| 2 | `PlaywrightTrafilaturaExtractor` | JS-render the page, then Trafilatura |
+| 3 | `ReadabilityExtractor` | readability-lxml → Markdownify |
 
-Robots checks happen only for ranked crawling—when both `crawl_websites` and
-`rank_and_score_deterministically` are true. Quarry fetches and caches each
-origin's `robots.txt`, then removes URLs the configured user agent cannot fetch.
-A missing `robots.txt` permits crawling; an error retrieving or parsing it
-causes Quarry to skip that origin conservatively. Candidate filtering then
-removes duplicate, blocked, and clearly non-content URLs before crawling starts.
+If no extractor passes the threshold, the **highest-scoring** result is used
+rather than discarding the document.
+
+### Deterministic Quality Score (`pipeline/crawler/quality.py`)
+
+Each extractor result is scored across 7 weighted signals:
+
+| Signal | Weight | Target value |
+| --- | ---: | --- |
+| Title present | 0.12 | Boolean |
+| Character count | 0.18 | 1800 chars |
+| Word count | 0.16 | 260 words |
+| Paragraph count | 0.14 | 8 paragraphs |
+| Content / HTML ratio | 0.16 | 0.20 |
+| Link density (lower = better) | 0.12 | 0.12 |
+| Navigation ratio (lower = better) | 0.12 | 0.12 |
+
+A result is **accepted** when all of these hard thresholds are met:
+
+| Threshold | Value |
+| --- | --- |
+| Minimum characters | 600 |
+| Minimum words | 90 |
+| Minimum paragraphs | 3 |
+| Minimum content/HTML ratio | 0.08 |
+| Maximum link density | 0.30 |
+| Maximum navigation ratio | 0.35 |
+| Minimum score | 0.68 |
+
+## Ranked Crawling (`crawl_websites=true`, `rank_and_score_deterministically=true`)
+
+Implemented in `pipeline/ranking/manager.py` using `asyncio.Queue`.
+
+### Pre-crawl steps
+
+1. **robots.txt check** — `pipeline/retrieval/robots.py` fetches and caches
+   each origin's `robots.txt` for `QuarryBot/0.6`. Missing files allow crawling;
+   fetch errors cause a conservative skip.
+2. **Candidate filtering** — `pipeline/ranking/filters.py` removes:
+   - Non-HTTP/HTTPS URLs
+   - Duplicate normalised URLs
+   - Configured blocked domains
+   - Static file extensions (`.pdf`, `.zip`, images, …)
+   - Noise paths: `/login`, `/privacy`, `/cookie`, `/terms`, `/feed`, `/tag`, `/category`
+
+### Queue-based worker loop
+
+```
+task_queue  ◄── all candidates loaded at startup
+result_queue ◄── workers push completed Documents
+
+Orchestrator loop:
+  while accepted < target_documents AND processed < total:
+      doc = await result_queue.get()   # fastest-completed, not batch-wait
+      if quality_score(doc) ≥ MIN_QUALITY_SCORE:
+          accepted.append(doc)
+      if len(accepted) >= target_documents:
+          break   # cancel remaining workers immediately
+```
+
+`N = min(CRAWL_MAX_CONCURRENCY, total_candidates)` workers run concurrently.
+Workers are cancelled the moment the target is met, releasing resources early.
+
+Final output: accepted documents sorted by `quality_score` descending, capped
+at `target_documents`.
+
+### Conditional behaviour summary
+
+| `crawl_websites` | `rank_and_score_deterministically` | Behaviour |
+| --- | --- | --- |
+| `false` | any | Snippets only; `crawl_status: "skipped"` |
+| `true` | `false` | Fetch all results concurrently via semaphore |
+| `true` | `true` | robots.txt → filter → queue-based workers → quality gate → stop at target |
 
 ## Failure Handling
 
-A timeout, HTTP client error, render failure, or extraction failure produces a
-fallback document rather than dropping the search result. Fallbacks preserve
-the search URL, title, and snippet, set a status of `fetch_failed` or
-`extract_failed`, and record a `crawl_fallback_reason` in metadata.
+| Failure type | Result |
+| --- | --- |
+| Fetch exception | `crawl_status: "fetch_failed"`, snippet retained as content |
+| Extraction exception | `crawl_status: "extract_failed"`, snippet retained as content |
+| All extractors below threshold | Highest-scoring extractor result used |
+| robots.txt fetch error | Origin skipped conservatively |
+| Worker crash in ranked mode | `None` pushed to result queue; orchestrator skips it |
