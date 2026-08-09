@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Request
 
-# Your custom metrics
 from api.metrics import (
     CACHE_LOOKUP_MS,
     COMPRESSION_RATIO,
@@ -27,7 +26,7 @@ router = APIRouter()
 @router.post(
     "/search",
     response_model=SearchResponse,
-    response_model_exclude_none=True,  # <-- Automatically hides None fields (documents/urls/formatted_content)
+    response_model_exclude_none=True,
     dependencies=[DEFAULT_RATE_LIMIT],
     tags=["Search"],
     summary="Search, optionally crawl and rank, then clean documents",
@@ -53,16 +52,14 @@ async def search(req: Request, body: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
     start = perf_counter()
 
-    # <-- CRITICAL FIX: Generate UUID inside the function so it is unique per request
     request_id = str(uuid4())
     mode = req.headers.get("x-mode", "production")
 
     try:
-        # 1. Capture the response
         response = await execute_search_pipeline(body, request_id, mode)
         benchmark = response.benchmark
 
-        # 2. --- POPULATE PROMETHEUS METRICS ---
+        # Emit Prometheus metrics from the pipeline benchmark
         if benchmark.cache_hit:
             SEARCH_CACHE_HITS.inc()
 
@@ -76,7 +73,6 @@ async def search(req: Request, body: SearchRequest) -> SearchResponse:
         CACHE_LOOKUP_MS.observe(benchmark.cache_lookup_ms)
         COMPRESSION_RATIO.observe(benchmark.compression_ratio)
 
-        # 3. Return the response to the user
         return response
 
     except Exception:
@@ -101,7 +97,6 @@ async def search(req: Request, body: SearchRequest) -> SearchResponse:
             query=body.query,
             timings=benchmark.timings,
             benchmark=benchmark,
-            # Explicitly set to None so exclude_none strips them from the response
             documents=None,
             formatted_content=None,
             urls=None,

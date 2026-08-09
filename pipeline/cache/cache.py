@@ -67,7 +67,7 @@ async def delete(key: str) -> None:
     redis = get_redis()
 
     async def op():
-        return await redis.get(key)
+        return await redis.delete(key)
 
     await REDIS_BREAKER.execute(
         lambda: retry(

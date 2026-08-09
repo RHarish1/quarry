@@ -101,7 +101,7 @@ async def execute_search_pipeline(
 
     # 3. Fallback to Brave
     total_found = len(tavily_results.results) + len(searx_results.results)
-    if total_found < request.target_documents * 2:
+    if total_found < request.target_documents:
         try:
             brave_results = await search_brave(request.query)
         except Exception:
@@ -114,7 +114,7 @@ async def execute_search_pipeline(
         + len(searx_results.results)
         + len(brave_results.results)
     )
-    if total_found < request.target_documents * 2:
+    if total_found < request.target_documents:
         try:
             ddg_results = await search_duckduckgo(request.query)
         except Exception:

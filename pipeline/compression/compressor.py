@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from time import perf_counter
 
 from models.clean_document import CleanDocument, CleanDocuments
+from utils.tokens import count_tokens
 
 logger = logging.getLogger(__name__)
-import re
 
-# Add these regex patterns near the top of compressor.py
+
 LINK_PATTERN = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 
@@ -65,8 +66,8 @@ def _compress_document(
         token_budget,
     )
 
-    compressed_tokens = _estimate_tokens(compressed)
-    original_tokens = _estimate_tokens(text)
+    compressed_tokens = count_tokens(compressed)
+    original_tokens = count_tokens(text)
 
     return document.model_copy(
         update={
@@ -137,7 +138,7 @@ def _truncate_to_budget(
     tokens = 0
 
     for paragraph in paragraphs:
-        estimate = _estimate_tokens(paragraph)
+        estimate = count_tokens(paragraph)
 
         if tokens + estimate > token_budget:
             break
@@ -149,7 +150,8 @@ def _truncate_to_budget(
 
 
 def _estimate_tokens(text: str) -> int:
-    return max(1, len(text) // CHARS_PER_TOKEN)
+    """Estimate tokens using the shared regex tokenizer."""
+    return max(1, count_tokens(text))
 
 
 def _minify_markdown(paragraphs: list[str]) -> list[str]:

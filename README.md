@@ -57,7 +57,7 @@ flowchart TD
       subgraph Compression["Compression Stage (compress_output=true)"]
         Split["Split into paragraphs"]
         DedupPara["Remove duplicate &\nboilerplate paragraphs"]
-        Budget["Keep paragraphs until\ntoken budget reached\n(~4 chars per token)"]
+        Budget["Keep paragraphs until\ntoken budget reached\n(regex tokenizer)"]
       end
 
       FormatOut["Output Formatter\ndefault · text_only\ncontent_only · url_only"]
@@ -146,14 +146,22 @@ uv run uvicorn api.app:app --reload
 
 The app does **not** call `load_dotenv`. Export variables in your shell, use a process manager, or pass `--env-file` to Docker.
 
+Alternatively, you can run the development stack with hot-reload via Docker Compose:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+This mounts your local directory into the container, exposing internal debug ports and auto-reloading Uvicorn on code changes.
+
 ## Retrieval Chain
 
 Quarry uses a sequential, multi-provider fallback strategy to maximise candidate coverage:
 
-1. **Tavily** (primary) — called first on every request
-2. **SearXNG** — called when Tavily returns fewer than `target_documents × 2` results
-3. **Brave Search** — called when the combined total is still below `target_documents`
-4. **DuckDuckGo** — ultimate free fallback when all others are insufficient
+1. **Tavily** (primary) — called first on every request. Uses its own `httpx.AsyncClient` (10 s timeout) to POST to `https://api.tavily.com/search`. Returns empty results if `TAVILY_API_KEY` is unset.
+2. **SearXNG** — called when Tavily returns fewer than `target_documents × 2` results. Uses the shared HTTPX client to GET `{SEARXNG_BASE_URL}/search?format=json`.
+3. **Brave Search** — called when the combined total is still below `target_documents`. Uses its own `httpx.AsyncClient` (10 s timeout) with `X-Subscription-Token` header. Returns empty results if `BRAVE_API_KEY` is unset.
+4. **DuckDuckGo** — ultimate free fallback when all others are insufficient. Uses the `ddgs` library with `backend="lite"`. Because DDGS is synchronous, the call is offloaded via `asyncio.to_thread()` to avoid blocking the event loop.
 
 Results from all providers are concatenated and deduplicated by URL (first-seen wins).
 
@@ -174,6 +182,8 @@ Keep-alive : 20
 
 This means the entire application maintains **one connection pool** — no TCP overhead per request, no race conditions on client lifecycle.
 
+In benchmark mode (`x-mode: benchmark` header), the crawler switches to a Chrome user-agent to reduce bot-blocking from target sites.
+
 ## Pipeline Stages
 
 | Stage | Module | Key behaviour |
@@ -182,44 +192,164 @@ This means the entire application maintains **one connection pool** — no TCP o
 | Retrieval | `pipeline/retrieval/` | Tavily → SearXNG → Brave → DDG fallback chain |
 | Crawling | `pipeline/crawler/` | Concurrent fetch with `asyncio.Semaphore`; extractor waterfall; fallback documents |
 | Ranked crawling | `pipeline/ranking/manager.py` | `asyncio.Queue`-based streaming workers; stops when `target_documents` accepted |
-| Extraction quality | `pipeline/crawler/quality.py` | Weighted score across 7 signals; `MIN_SCORE = 0.68` |
+| Extraction quality | `pipeline/crawler/quality.py` | Weighted score across 7 signals; `MIN_SCORE = 0.65` |
 | Cleaning | `pipeline/cleaning/cleaner.py` | Levels 0–3; deterministic keyword matching |
-| Compression | `pipeline/compression/compressor.py` | Paragraph-level; 4 chars ≈ 1 token; optional |
+| Compression | `pipeline/compression/compressor.py` | Paragraph-level; shared regex tokenizer (`utils/tokens.py`); optional |
 | Caching | `pipeline/cache/` | Redis; `search:<sha256>`; 1-hour TTL |
 | Resilience | `pipeline/resilience/` | Per-dependency retry + circuit breaker |
+
+## Extraction Waterfall
+
+The `ExtractorManager` (`pipeline/crawler/manager.py`) runs three extractors in priority order on each fetched page. After each extraction attempt, the result is scored by `score_extraction()` in `pipeline/crawler/quality.py`. If the score meets the acceptance threshold (`minimum_score`), that result is accepted immediately without trying later extractors.
+
+| Priority | Extractor | Input | Notes |
+| ---: | --- | --- | --- |
+| 1 | `TrafilaturaExtractor` | Raw HTML | Fastest; no browser required |
+| 2 | `PlaywrightTrafilaturaExtractor` | JS-rendered HTML | Launches headless Chromium, then runs Trafilatura on the rendered DOM |
+| 3 | `ReadabilityExtractor` | Raw HTML | Uses `readability-lxml` + `markdownify`; final fallback |
+
+The quality score is a weighted sum of 7 signals:
+
+| Signal | Weight | What it measures |
+| --- | ---: | --- |
+| Title present | 0.12 | Whether the extractor found a page title |
+| Character count | 0.18 | Total chars vs. target of 1800 |
+| Word count | 0.16 | Total words vs. target of 260 |
+| Paragraph count | 0.14 | Double-newline-split paragraphs vs. target of 8 |
+| Content / HTML ratio | 0.16 | Plain text length ÷ raw HTML length vs. target of 0.20 |
+| Link density | 0.12 | Fraction of text inside hyperlinks (lower is better) |
+| Navigation ratio | 0.12 | Fraction of text in nav-like elements (lower is better) |
+
+Hard rejection thresholds (result is rejected regardless of weighted score):
+
+| Check | Threshold |
+| --- | --- |
+| Min characters | 600 |
+| Min words | 90 |
+| Min paragraphs | 3 |
+| Min content/HTML ratio | 0.08 |
+| Max link density | 0.30 |
+| Max navigation ratio | 0.35 |
+
+If **no extractor** passes the acceptance threshold, the manager keeps the **highest-scoring** result rather than discarding the page entirely. The score is stored as `extraction_confidence` in the document metadata.
+
+## Ranked Crawl Worker Pool
+
+When `crawl_websites=true` and `rank_and_score_deterministically=true`, crawling is managed by `pipeline/ranking/manager.py` using a streaming `asyncio.Queue`-based worker pool:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Pre-crawl                                                   │
+│  1. robots.txt check (concurrent, per-origin, cached)       │
+│  2. Candidate filtering:                                    │
+│     - Non-HTTP URLs removed                                 │
+│     - Blocked domains (social, video, search engines,       │
+│       paywalls — 30+ domains in ranking/constants.py)       │
+│     - Blocked paths (/login, /privacy, /tag/, /cart, etc.)  │
+│     - Blocked extensions (.pdf, .zip, .jpg, .mp4, etc.)     │
+│     - Duplicate URLs (normalized: www stripped, trailing /   │
+│       removed)                                              │
+└────────────────────────┬────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Worker Pool                                                 │
+│                                                             │
+│  task_queue  ◄── all filtered candidates loaded at start    │
+│  result_queue ◄── workers push completed Documents          │
+│                                                             │
+│  N = min(CRAWL_MAX_CONCURRENCY, total_candidates) workers   │
+│                                                             │
+│  Each worker:                                               │
+│    1. Dequeue a candidate from task_queue                    │
+│    2. Crawl + extract (full waterfall)                       │
+│    3. Push resulting Document to result_queue                │
+│    4. On exception: push None (prevents deadlock)            │
+│                                                             │
+│  Orchestrator loop:                                         │
+│    while accepted < target AND processed < total:            │
+│      doc = await result_queue.get()  # fastest-first        │
+│      if doc and quality_score >= MIN_QUALITY_SCORE (0.65):   │
+│        accept(doc)                                          │
+│      if accepted >= target: break                            │
+│                                                             │
+│  On break or exhaustion:                                    │
+│    cancel all workers → await gather(return_exceptions)      │
+│    sort accepted by quality_score desc                       │
+│    return top target_documents                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The key advantage over batch crawling: the orchestrator never waits for a full batch to finish. It processes results as they stream in and cancels all remaining workers the moment the target is met, releasing connections and CPU immediately.
 
 ## Resilience
 
 ### Exponential Backoff + Jitter
 
-Every network call is wrapped in a `RetryExecutor`. Transient exceptions (`TimeoutError`, `ConnectionError`) and HTTP status codes (408, 429, 500–504) trigger retries.
+Every network call is wrapped in a `RetryExecutor`. Transient exceptions (`TimeoutError`, `ConnectionError`) and HTTP status codes (408, 429, 500–504) trigger retries. Non-transient failures (`PermanentError`, HTTP 4xx other than 408/429) are raised immediately.
 
-| Dependency | Max retries | Base delay | Max delay | Jitter |
+The backoff formula is:
+
+```
+delay = min(base_delay × (backoff_multiplier ^ attempt), max_delay) + uniform(0, jitter)
+```
+
+| Policy | Max retries | Base delay | Max delay | Jitter |
 | --- | ---: | ---: | ---: | ---: |
-| Search providers | 3 | 250 ms | 2 s | ±200 ms |
-| Page crawler | 2 | 500 ms | 4 s | ±300 ms |
-| Redis | 2 | 100 ms | 1 s | ±50 ms |
+| `SEARCH_PROVIDER_RETRY` | 3 | 250 ms | 2 s | ±200 ms |
+| `CRAWLER_RETRY` | 2 | 500 ms | 4 s | ±300 ms |
+| `REDIS_RETRY` | 2 | 100 ms | 1 s | ±50 ms |
+| `DEFAULT_RETRY` | 3 | 500 ms | 8 s | ±250 ms |
+| `NO_RETRY` | 0 | — | — | — |
 
-### Circuit Breakers
+### Circuit Breaker State Machine
 
-| Breaker | Failure threshold | Recovery timeout |
+The `CircuitBreaker` class (`pipeline/resilience/circuit_breaker.py`) implements a three-state machine:
+
+```
+CLOSED ──(consecutive failures ≥ threshold)──► OPEN
+   ▲                                              │
+   │                                    (recovery_timeout elapses)
+   │                                              ▼
+   └──────────(probe succeeds)────────── HALF_OPEN
+                                              │
+                                   (probe fails → back to OPEN)
+```
+
+- **CLOSED** — normal operation. Every failure increments a counter; every success resets it.
+- **OPEN** — all calls are rejected instantly with `CircuitOpenError` (no network traffic).
+- **HALF_OPEN** — after `recovery_timeout` seconds, **one** probe call is allowed through (guarded by `asyncio.Lock`). Success → CLOSED. Failure → OPEN.
+
+#### Breaker configuration policies
+
+Policies are defined in `pipeline/resilience/policies.py`:
+
+| Policy | Failure threshold | Recovery timeout |
 | --- | ---: | ---: |
-| `fast-provider` (SearXNG etc.) | 5 | 20 s |
-| `slow-provider` (Playwright etc.) | 3 | 60 s |
-| `crawler` | 4 | 30 s |
-| `redis` | 5 | 15 s |
+| `FAST_PROVIDER_BREAKER` | 5 | 20 s |
+| `SLOW_PROVIDER_BREAKER` | 3 | 60 s |
 
-A breaker opens → rejects calls instantly → after timeout allows one half-open probe → closes on success or reopens on failure.
+#### Per-dependency breaker instances
+
+Each dependency creates its own `CircuitBreaker` instance, most inheriting thresholds from the policies above:
+
+| Breaker instance | Defined in | Wraps | Inherits from |
+| --- | --- | --- | --- |
+| `SEARXNG_BREAKER` | `pipeline/retrieval/searxng.py` | SearXNG search calls | `FAST_PROVIDER_BREAKER` |
+| `ROBOTS_BREAKER` | `pipeline/retrieval/robots.py` | robots.txt fetches | `FAST_PROVIDER_BREAKER` |
+| `CRAWLER_BREAKER` | `pipeline/crawler/fetcher.py` | Page crawl fetches | `FAST_PROVIDER_BREAKER` |
+| `REDIS_BREAKER` | `pipeline/cache/cache.py` | Redis get/set/delete | Own config (threshold=10, timeout=10 s) |
+
+Tavily, Brave, and DuckDuckGo providers handle errors internally (returning empty `SearchResults`) and are not wrapped by circuit breakers.
 
 ### Graceful Shutdown
 
-`ShutdownManager` (registered in FastAPI lifespan):
-1. Cancels all registered background `asyncio.Task`s
-2. Runs cleanup callbacks in **reverse** registration order
+`ShutdownManager` (`pipeline/resilience/shutdown.py`, registered in FastAPI lifespan):
+1. Cancels all registered background `asyncio.Task`s and awaits them with `return_exceptions=True`
+2. Runs cleanup callbacks in **reverse** registration order (LIFO)
 3. Closes the shared HTTPX client
 4. Closes the Redis client
 
-Shutdown is idempotent — repeated signals are safely ignored.
+Shutdown is idempotent — an `asyncio.Lock` + boolean flag prevent double-shutdown.
 
 ## Middleware & Metrics
 
@@ -243,6 +373,10 @@ Shutdown is idempotent — repeated signals are safely ignored.
 | `quarry_tokens_saved_total` | Counter | Tokens removed by compression |
 
 FastAPI HTTP metrics (latency, status codes, request counts) are additionally exposed by `prometheus-fastapi-instrumentator` at `GET /metrics`.
+
+### File-based Logging
+
+In addition to stdout, Quarry writes structured, timestamped logs to the `logs/` directory (`config/logging.py`). A new log file is created on startup (e.g., `2026-08-09_07-18-00.log`).
 
 ## Schemas (Pydantic v2)
 
