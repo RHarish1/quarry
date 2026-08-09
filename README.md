@@ -1,10 +1,39 @@
 ![CI](https://github.com/RHarish1/quarry/actions/workflows/ci.yml/badge.svg)
 ![Docker](https://github.com/RHarish1/quarry/actions/workflows/docker.yml/badge.svg)
 ![CodeQL](https://github.com/RHarish1/quarry/actions/workflows/codeql.yml/badge.svg)
+![Benchmark](https://github.com/RHarish1/quarry/actions/workflows/benchmark.yml/badge.svg)
 
 # Quarry
 
 Quarry is an LLM-native retrieval backend. It searches a resilient multi-provider chain (Tavily → SearXNG → Brave → DuckDuckGo), optionally crawls and ranks candidate pages through a 3-stage extraction waterfall, then returns cleaned and optionally compressed Markdown through a REST API.
+
+## Motivation
+
+Large Language Models (LLMs) require high-quality, noise-free context to produce accurate outputs and avoid hallucinations. Traditional web search APIs are optimized for humans, they return links and short snippets, not structured knowledge.
+
+As a result, developers are forced to:
+- Build custom scrapers  
+- Strip HTML boilerplate  
+- Handle anti-bot mechanisms  
+- Fit content into strict token limits  
+
+This adds unnecessary complexity and inefficiency.
+
+**Quarry solves this problem.**
+
+It acts as a deterministic retrieval layer that:
+- Fetches web content  
+- Cleans and normalizes HTML  
+- Deduplicates redundant data  
+- Compresses content into high-density Markdown  
+
+This ensures that LLMs spend their context window on **actual information**, not noise like ads or navigation menus.
+
+**Outcome:**
+- Fewer tokens used  
+- Lower latency and bandwidth  
+- Standardized, reliable retrieval  
+- Resilient fallback across multiple search providers  
 
 ## System Architecture
 
@@ -482,6 +511,31 @@ Each run reports:
 
 To bypass rate limiting during benchmarks, the runner sets `x-mode: benchmark` on each request (handled by the API's conditional limiter via the `x-benchmark: true` header pattern).
 
+## Benchmark Results
+
+Measured across two independent runs (10 requests per tier × config, 90 requests per run) against live Tavily + SearXNG:
+
+| Tier | Config | p50 Latency | Cache Hit Rate | Avg Token Reduction |
+| --- | --- | ---: | ---: | ---: |
+| Easy | `baseline` | 32.0 – 39.7 s | 0% | 0.5 – 1.5% |
+| Easy | `cache_on` | 3.8 – 4.2 ms | 100% | 1.7 – 2.7% |
+| Easy | `compression_1048_cache_off` | 17.9 – 35.1 s | 0% | 50.9 – 57.0% |
+| Medium | `baseline` | 13.3 – 13.5 s | 0% | 0.1 – 0.7% |
+| Medium | `cache_on` | 4.0 ms – 15.2 s* | 90 – 100% | 0.9 – 1.4% |
+| Medium | `compression_1048_cache_off` | 12.1 – 16.7 s | 0% | 67.3 – 72.0% |
+| Hard | `baseline` | 15.7 – 35.3 s | 0% | 0.2 – 1.0% |
+| Hard | `cache_on` | 3.7 – 4.6 ms | 100% | 0.3 – 0.7% |
+| Hard | `compression_1048_cache_off` | 12.0 – 13.7 s | 0% | 68.6 – 76.1% |
+
+**Headline numbers:**
+- **p50 latency drops by >99.9%** on cache hit (13,000–48,000 ms cold → ~4 ms cached).
+- **Token reduction reaches 50–76%** at a 1048-token budget, scaling with document length (harder/longer-form queries compress more).
+- **179 / 180 requests succeeded** across both runs (99.4% aggregate success rate) against live, uncontrolled web targets.
+
+\* One `medium | cache_on` run recorded a 15.2 s p50 despite a 90% cache hit rate — likely a single cold miss or cache warm-up race skewing a 10-request sample. Tracked under the Stage-Level Caching and SearXNG stability roadmap items.
+
+Raw JSON output from `scripts/benchmark.py` for all 9 tier × config combinations is available on request or reproducible locally via the [Running the Benchmark](docs/benchmark.md#running-the-benchmark) instructions.
+
 ## CI / CD Pipelines
 
 | Workflow | Trigger | Steps |
@@ -570,3 +624,85 @@ quarry/
 - [Resilience & Observability](docs/resilience-observability.md) — retry policies, circuit breakers, shutdown, metrics
 - [Testing](docs/testing.md) — unit/integration test structure, coverage, CI config
 - [Benchmark](docs/benchmark.md) — benchmark script, configurations, CI workflow, result interpretation
+
+## Project Roadmap
+
+Future development is focused on **speed, stability, and retrieval quality**.
+
+### Phase 1: Core Stability & Architecture
+
+- [ ] **Stage-Level Caching**  
+  Introduce granular caching between pipeline stages (e.g., raw HTML, cleaned content) to:
+  - Reduce redundant computation  
+  - Accelerate debugging  
+  - Improve repeated query performance  
+
+- [ ] **SearXNG Stability Upgrades**  
+  Add:
+  - Strict timeouts  
+  - Automated fallback triggers  
+  - Circuit breakers  
+  to handle failures in internal SearXNG instances.
+
+- [ ] **Codebase Refactoring & Tech Debt**  
+  - Improve modular architecture  
+  - Expand type hinting coverage  
+  - Remove legacy code paths  
+  - Prepare for open-source contributions  
+
+### Phase 2: Performance & Speed
+
+- [ ] **Crawling Concurrency Optimization**  
+  Redesign async crawling pipeline to:
+  - Maximize parallel fetch throughput  
+  - Eliminate I/O bottlenecks  
+  - Improve overall latency  
+
+- [ ] **Streaming API Responses (SSE)**  
+  Implement Server-Sent Events to:
+  - Stream results per document  
+  - Reduce Time-To-First-Byte (TTFB)  
+  - Improve perceived responsiveness  
+
+
+### Phase 3: Advanced Capabilities
+
+- [ ] **Semantic Query Understanding**  
+  Upgrade query normalization to:
+  - Capture intent (not just keywords)  
+  - Improve upstream search relevance  
+
+- [ ] **Custom Extraction Targeting**  
+  Allow users to pass:
+  - CSS selectors  
+  - JSON paths  
+
+  Enables precise extraction from known layouts, bypassing generic pipelines.
+
+- [ ] **Summarization & Context Headroom**  
+  Add lightweight local summarization to:
+  - Dynamically fit content into token limits  
+  - Optimize context usage for downstream LLMs  
+
+- [ ] **Vector-Based Search Integration**  
+  Enable optional RAG support:
+  - Embed extracted chunks  
+  - Store in vector DB  
+  - Enable semantic retrieval  
+
+
+### Phase 4: Ecosystem & Deployment
+
+- [ ] **Hosted Deployment & Observability**  
+  Launch managed Quarry service with:
+  - Cloud-hosted API  
+  - Real-time logging & metrics  
+  - Tracing and analytics dashboards  
+  - Enterprise-grade observability  
+
+
+## Vision
+
+Quarry aims to become the **default retrieval layer for LLM applications**—a deterministic, efficient, and production-grade bridge between the chaotic web and structured AI context.
+
+
