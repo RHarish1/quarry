@@ -141,6 +141,12 @@ jobs:
       - name: Run benchmark
         run: uv run python scripts/benchmark.py
 
+      - name: Teardown API
+        if: always()
+        run: |
+          echo "Shutting down background Uvicorn server to prevent CI timeout..."
+          pkill -f uvicorn || true
+
       - name: Show API logs
         if: always()
         run: cat uvicorn.log
