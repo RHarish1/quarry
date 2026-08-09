@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quarry-api:dev
+    environment:
+      APP_ENV: development
+      SEARXNG_BASE_URL: http://searxng:8080
+      SEARXNG_TIMEOUT_SECONDS: 20
+      CRAWL_TIMEOUT_SECONDS: 15
+      CRAWL_MAX_CONCURRENCY: 5
+      REDIS_URL: redis://redis:6379/0
+    # Mount local code directory into container for real-time file sync
+    volumes:
+      - .:/app
+      # Anonymous volume trick: prevents host node_modules/.venv from overriding container packages
+      - /app/.venv
+    ports:
+      - "8000:8000"
+    # Override ENTRYPOINT to pass `--reload` flag to Uvicorn
+    entrypoint: [ "uv", "run", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload" ]
+
+  # Expose internal debug ports to host during development
+  searxng:
+    ports:
+      - "8080:8080"
+
+  redis:
+    ports:
+      - "6379:6379"

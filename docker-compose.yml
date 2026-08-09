@@ -1,12 +1,10 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: rharish1/quarry-api:latest
     env_file:
       - .env
     environment:
-      APP_ENV: development
+      APP_ENV: production
       SEARXNG_BASE_URL: http://searxng:8080
       SEARXNG_TIMEOUT_SECONDS: 20
       CRAWL_TIMEOUT_SECONDS: 15
@@ -31,8 +29,8 @@ services:
     environment:
       INSTANCE_NAME: Quarry
       BASE_URL: http://localhost:8080/
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     depends_on:
       redis:
         condition: service_started
@@ -47,8 +45,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -72,8 +70,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=quarry_admin
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-quarry_admin}
     volumes:
       - grafana_data:/var/lib/grafana
     restart: unless-stopped
