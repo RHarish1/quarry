@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quarry"
-version = "0.1.0"
+version = "1.0.0"
 description = "LLM-native retrieval backend"
 requires-python = ">=3.12"
 dependencies = [
@@ -21,7 +21,7 @@ dependencies = [
   "trafilatura>=1.9,<2.0",
   "typing-extensions>=4.16.0",
   "prometheus-fastapi-instrumentator>=8.1.0",
-  "duckduckgo-search>=8.1.1",
+  "ddgs>=8.1.1",
 ]
 
 [project.optional-dependencies]

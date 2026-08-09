@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from models.search import SearchResult, SearchResults
 

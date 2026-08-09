@@ -52,7 +52,7 @@ app = FastAPI(
         "returns cleaned Markdown documents. Open the **Search** endpoint for "
         "field-by-field behavior and a ready-to-run example."
     ),
-    version="0.8.0",
+    version="1.0.0",
     openapi_tags=[
         {
             "name": "Search",

@@ -162,10 +162,11 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
 def test_pipeline_sets_compression_latency_to_zero_when_search_fails(
     monkeypatch,
 ) -> None:
-    async def failing_search_searxng(request: SearchRequest) -> SearchResults:
-        raise RuntimeError("SearXNG unavailable")
+    async def failing_search(request: SearchRequest) -> SearchResults:
+        raise RuntimeError("Search unavailable")
 
-    monkeypatch.setattr(pipeline_module, "search_searxng", failing_search_searxng)
+    monkeypatch.setattr(pipeline_module, "search_searxng", failing_search)
+    monkeypatch.setattr(pipeline_module, "search_duckduckgo", failing_search)
     request_id = str(uuid4())
     response = asyncio.run(
         pipeline_module.execute_search_pipeline(
