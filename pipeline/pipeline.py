@@ -10,6 +10,7 @@ from config.settings import settings
 from models.clean_document import CleanRequest
 from models.search import (
     CrawlRequest,
+    FlexibleFormatting,
     SearchBenchmark,
     SearchRequest,
     SearchResponse,
@@ -119,7 +120,7 @@ async def execute_search_pipeline(
                 total_request_latency_ms=total_request_latency_ms,
             ),
             benchmark=benchmark,
-            documents=[],
+            documents=None,
         )
     logger.info(
         "Search completed: %d results (%.2f ms)",
@@ -167,7 +168,7 @@ async def execute_search_pipeline(
                 total_request_latency_ms=total_request_latency_ms,
             ),
             benchmark=benchmark,
-            documents=[],
+            documents=None,
         )
     logger.info(
         "Crawl completed: %d documents (%.2f ms)",
@@ -207,7 +208,7 @@ async def execute_search_pipeline(
                 total_request_latency_ms=total_request_latency_ms,
             ),
             benchmark=benchmark,
-            documents=[],
+            documents=None,
         )
     logger.info(
         "Cleaning completed: %d documents (%.2f ms)",
@@ -250,15 +251,50 @@ async def execute_search_pipeline(
         total_request_latency_ms=total_request_latency_ms,
     )
     benchmark.timings = timings
+
+    # 1. Determine the correct payload based on the requested format
+    documents_payload = None
+    formatted_content_payload = None
+    urls_payload = None
+
+    if request.format == FlexibleFormatting.TEXT_ONLY:
+        formatted_content_payload = "\n\n---\n\n".join(
+            f"# [{idx}] {getattr(doc, 'title', 'Untitled')}\n**URL:** {getattr(doc, 'url', '')}\n\n{getattr(doc, 'cleaned_markdown', getattr(doc, 'markdown', getattr(doc, 'content', '')))}"
+            for idx, doc in enumerate(compressed_documents.documents, start=1)
+        )
+    elif request.format == FlexibleFormatting.CONTENT_ONLY:
+        formatted_content_payload = "\n\n".join(
+            getattr(
+                doc,
+                "cleaned_markdown",
+                getattr(doc, "markdown", getattr(doc, "content", "")),
+            )
+            for doc in compressed_documents.documents
+        )
+    elif request.format == FlexibleFormatting.URL_ONLY:
+        urls_payload = [
+            getattr(doc, "url", "") for doc in compressed_documents.documents
+        ]
+    else:
+        # DEFAULT: populate the full document list
+        documents_payload = compressed_documents.documents
+
+    # 2. Build the final response
     response = SearchResponse(
         success=True,
         request_id=request_id,
         query=request.query,
         timings=timings,
         benchmark=benchmark,
-        documents=compressed_documents.documents,
+        documents=documents_payload,
+        formatted_content=formatted_content_payload,
+        urls=urls_payload,
     )
-    if request.enable_caching and response.documents:
+
+    # 3. Cache it (only if there is actual data in one of the fields)
+    if request.enable_caching and (
+        response.documents or response.formatted_content or response.urls
+    ):
         t = perf_counter()
         await set_cache(key, response)
         benchmark.cache_write_ms = (perf_counter() - t) * 1000

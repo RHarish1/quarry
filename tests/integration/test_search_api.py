@@ -93,7 +93,7 @@ def test_search_endpoint_returns_documents(monkeypatch) -> None:
                 "language": "en",
                 "engines": ["google"],
                 "categories": ["general"],
-                "format": "json",
+                "format": "default",
             },
         )
     finally:

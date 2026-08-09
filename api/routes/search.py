@@ -22,12 +22,12 @@ from pipeline.pipeline import execute_search_pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-request_id = str(uuid4())
 
 
 @router.post(
     "/search",
     response_model=SearchResponse,
+    response_model_exclude_none=True,  # <-- Automatically hides None fields (documents/urls/formatted_content)
     dependencies=[DEFAULT_RATE_LIMIT],
     tags=["Search"],
     summary="Search, optionally crawl and rank, then clean documents",
@@ -52,10 +52,13 @@ request_id = str(uuid4())
 async def search(req: Request, body: SearchRequest) -> SearchResponse:
     """Accept a search request and return crawled, cleaned documents."""
     start = perf_counter()
+
+    # <-- CRITICAL FIX: Generate UUID inside the function so it is unique per request
+    request_id = str(uuid4())
     mode = req.headers.get("x-mode", "production")
 
     try:
-        # 1. Capture the response instead of returning it immediately
+        # 1. Capture the response
         response = await execute_search_pipeline(body, request_id, mode)
         benchmark = response.benchmark
 
@@ -76,7 +79,10 @@ async def search(req: Request, body: SearchRequest) -> SearchResponse:
         # 3. Return the response to the user
         return response
 
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.exception(
+            f"Unhandled exception during search pipeline (req: {request_id})"
+        )
         total_latency = (perf_counter() - start) * 1000
 
         benchmark = SearchBenchmark(
@@ -95,5 +101,8 @@ async def search(req: Request, body: SearchRequest) -> SearchResponse:
             query=body.query,
             timings=benchmark.timings,
             benchmark=benchmark,
-            documents=[],
+            # Explicitly set to None so exclude_none strips them from the response
+            documents=None,
+            formatted_content=None,
+            urls=None,
         )

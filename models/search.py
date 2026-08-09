@@ -21,10 +21,10 @@ class CleaningLevel(IntEnum):
 class FlexibleFormatting(str, Enum):
     """Flexible output formatting options."""
 
-    CONTENT_ONLY = "content_only"
-    DEFAULT_WITH_METADATA = "default_with_metadata"
-    URL_TITLE_ONLY = "url_title_only"
-    URL_TITLE_CONTENT = "url_title_content"
+    DEFAULT = "default"  # Full list of CleanDocument objects
+    TEXT_ONLY = "text_only"  # Merged markdown + titles + URLs
+    CONTENT_ONLY = "content_only"  # Merged markdown only (no URLs/titles)
+    URL_ONLY = "url_only"  # List of scraped URLs only
 
 
 class TimeRange(str, Enum):
@@ -53,12 +53,13 @@ class SearchRequest(BaseModel):
             "examples": [
                 {
                     "query": "GPT-5",
+                    "format": "default",
                     "crawl_websites": True,
                     "rank_and_score_deterministically": True,
-                    "target_documents": 5,
+                    "target_documents": 3,
                     "cleaning_level": 2,
                     "compress_output": True,
-                    "target_token_budget": 1024,
+                    "target_token_budget": 8392,
                     "enable_caching": True,
                     "engines": [""],
                     "language": "en",
@@ -71,6 +72,10 @@ class SearchRequest(BaseModel):
 
     query: str = Field(
         ..., min_length=1, description="Text sent to SearXNG to find candidate URLs."
+    )
+    format: FlexibleFormatting = Field(
+        default=FlexibleFormatting.DEFAULT,
+        description="Controls returned structure: 'default' populates the document list; 'text_only' merges all cleaned markdowns into formatted_content.",
     )
     cleaning_level: CleaningLevel = Field(
         default=CleaningLevel.LEVEL_0,
@@ -259,5 +264,9 @@ class SearchResponse(BaseModel):
     request_id: str
     query: str
     timings: SearchTimings
-    documents: list[CleanDocument] = Field(default_factory=list)
     benchmark: SearchBenchmark
+
+    # --- The Payload (Only ONE will be populated based on formatting) ---
+    documents: list[CleanDocument] | None = Field(default=None)
+    formatted_content: str | None = Field(default=None)
+    urls: list[str] | None = Field(default=None)

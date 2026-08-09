@@ -153,7 +153,7 @@ def test_pipeline_uses_ranking_when_enabled(monkeypatch) -> None:
     )
 
     assert response.query == "quarry"
-    assert len(response.documents) == 1
+    assert response.documents and len(response.documents) == 1
     assert response.documents[0].url == "https://example.com/article"
     assert response.timings.compression_latency_ms == 12.5
     assert response.timings.total_request_latency_ms >= 0.0
@@ -175,7 +175,7 @@ def test_pipeline_sets_compression_latency_to_zero_when_search_fails(
         )
     )
 
-    assert response.documents == []
+    assert response.documents is None
     assert response.timings.search_latency_ms >= 0.0
     assert response.timings.crawl_latency_ms == 0.0
     assert response.timings.cleaning_latency_ms == 0.0
