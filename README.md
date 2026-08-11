@@ -705,4 +705,26 @@ Future development is focused on **speed, stability, and retrieval quality**.
 
 Quarry aims to become the **default retrieval layer for LLM applications**—a deterministic, efficient, and production-grade bridge between the chaotic web and structured AI context.
 
+## Design Decisions
 
+Some decisions I took while creating this project:
+
+### Why call Tavily → SearXNG → Brave → DuckDuckGo one after another instead of hitting them all at once?
+
+Because most requests don't need all four. Each provider has its own cost and rate-limit profile, Tavily especially, since it's a paid API, so firing them all in parallel would mean paying for and waiting on providers you didn't even need. The chain only moves to the next provider if the current results fall short of the target document count, and each call is wrapped in its own try/except so one provider going down doesn't take the others with it.
+
+### Why deterministic, rule-based cleaning instead of just having an LLM clean up the markdown?
+
+Because Quarry's whole job is to hand reliable context to an LLM further down the pipeline and an LLM cleaning step would undermine that. Run the same page through it twice and you might get two different outputs, plus you're burning tokens cleaning content before you've even used it. Rule-based transformations at fixed cleaning levels (0–3) are boring in the best way: same input, same output, every time, with clean metrics on exactly how much was trimmed.
+
+### Why a worker pool that cancels itself early instead of just crawling every candidate URL?
+
+Because most candidate URLs turn out to be junk, and crawling them anyway is just wasted time and bandwidth. Instead, workers pull from a queue and stream results back as they finish extracting. The moment enough documents clear the quality bar, the rest of the workers get cancelled. So the time a request takes tracks "how fast we found good pages," not "how many pages exist."
+
+### Why cache the whole response instead of caching individual documents?
+
+A full-response cache hit means skipping retrieval, crawling, cleaning, and compression in one Redis lookup — about as cheap as a cache can get. Caching at the document level would still leave ranking, compression, and formatting to redo on every request. The catch is staleness, which is why entries expire after an hour, and the cache key is built off the *normalized* query and sorted params rather than the raw string — so near-duplicate queries still land on the same cached response. I do plan on caching individual steps so Quarry is able to speed up the flow without the cost of 
+
+### Why trim to a token budget and dedupe paragraphs instead of just summarizing with an LLM?
+
+Same logic as the cleaning step: determinism and cost. An LLM summary adds latency, adds cost on every cache miss, and — worse — can quietly change the actual wording of the source. If the thing reading this output later needs to quote or verify a fact from the page, you don't want a summarizer's paraphrase in the way. Budget-based trimming and paragraph dedup shrink the content without touching what it actually says. I also plan on adding [Headroom](https://github.com/headroomlabs-ai/headroom) summarizer that can be used if one wishes to.
